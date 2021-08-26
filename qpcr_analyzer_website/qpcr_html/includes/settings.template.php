@@ -1,7 +1,10 @@
 <?php
 
-// Save this file as settings.php and fill in S3_BUCKET, CONTACT_EMAIL, LAMBDA_FUNCTION, LAMBDA_FROM_EMAIL, and AWS_REGION.
+// Save this file as settings.php and fill in S3_BUCKET, CONTACT_EMAIL, LAMBDA_FUNCTION, LAMBDA_FROM_EMAIL, AWS_REGION, and
+// LAMBDA_SAMPLES.
 // Change other settings if desired.
+
+require_once "users.php";
 
 define('S3_BUCKET',                         "odm-qpcr-analyzer");
 // define('S3_BUCKET',                         "odm-qpcr-analyzer-ohri");
@@ -11,21 +14,19 @@ define('S3_BUCKET',                         "odm-qpcr-analyzer");
 define("ALLOWABLE_EMAILS",                  []);
 
 define('AWS_REGION',                        "us-east-1");
-define('S3_ROOT',                           "u/{$USERNAME}/inputs/");
+define('S3_INPUTS_ROOT',                    "u/{$USERNAME}/inputs/");
 
-define("UPLOADS_ROOT",                      ROOT . "../qpcr_other/u/{$USERNAME}/uploads/");
-define("UPLOADS_TTL",                       60*60);  # In seconds
 define("ALLOW_POST",                        true);
 define("ALLOW_GET",                         true);
 
-define("CONTACT_EMAIL",                     "contact@eample.com");
+define("CONTACT_EMAIL",                     "mwellman@ohri.ca");
 
 define("UPLOADS_DIR_MAXSIZE",               2000);   // In MB
 define("SESSION_DIR_MAXSIZE",               500);    // In MB
 
 // Sent to Lambda function
 define("LAMBDA_FUNCTION",                   "odm-qpcr-analyzer");
-define("LAMBDA_FROM_EMAIL",                 "Email Name <sender@example.com>");
+define("LAMBDA_FROM_EMAIL",                 "ODM QPCR Analyzer <odm@cryotoad.com>");
 define("LAMBDA_SAMPLES",                    "");
 define("LAMBDA_SITES_FILE",                 "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/sites.xlsx");
 define("LAMBDA_SITES_CONFIG",               "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/sites.yaml");
