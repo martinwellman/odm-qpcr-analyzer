@@ -62,6 +62,15 @@ This is the key name used for authentication when you SSH into an instance. A ke
 
 This is the AMI ID used for building the final Lambda function Docker container. The AMI is built by running the script [lambda_container/makeec2ami.sh](makeec2ami.sh). Before running makeec2ami.sh, you can leave this field blank until the AMI ID is available. See the next section for running makeec2ami.sh to retrieve the ID. The ID should look like ami-1234567890abcdef0.
 
+
+## Creating The Maker
+
+The purpose of the maker is to save a bit of build time when it comes to building the actual Lambda function Docker container. [lambda_container/makeec2ami.sh](makeec2ami.sh) will install packages with yum, install the AWS CLI, and install Docker on an AWS EC2 instance. It then creates the Maker AMI (out of itself) which can then be used in the future for building the Lambda function Docker container. You should first setup and enter all variables listed in [Initial Setup](#Initial_Setup), other than MAKER_IMAGE_ID. Once complete, execute:
+
+    ./makeec2ami.sh
+
+This will launch the EC2 instance and start the building process. The script will output details on how you can monitor progress of the AMI build. Once the AMI image has been made, you can obtain the AMI ID in the EC2 dashboard under [Images -> AMIs](https://console.aws.amazon.com/ec2/v2/home#Images:sort=name). Enter this ID in the settings.sh file of the previous section for MAKER_IMAGE_ID.
+
 ## Setting up the Source Files
 
 The Lambda Container needs various files from qpcr_analyzer. To keep things organized, symbolic links are made to all required files in the qpcr_analyzer. To create these links, run:
