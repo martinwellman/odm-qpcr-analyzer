@@ -39,6 +39,7 @@ qpcr_analyzer_website/qpcr_html/vendor/
 
 # All links in the Lambda container
 lambda_container/source/app/qpcr_updater.yaml
+lambda_container/source/app/qpcr_updater_b117.yaml
 lambda_container/source/app/qpcr_populator_ottawa_wide_diff.yaml
 lambda_container/source/app/qpcr_populator_ottawa.yaml
 lambda_container/source/app/sites.xlsx
