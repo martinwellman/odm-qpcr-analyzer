@@ -23,7 +23,7 @@ To install the QPCR Analyzer on your computer run the following commands:
     cd odm-qpcr-analyzer/qpcr_analyzer
     ./localfixes.sh
 
-The script localfixes.sh applies changes to both OpenPYXL and Ghostscript. These changes will affect your local copies of the OpenPYXL and Ghostscript packages, but should not affect behavior of other scripts that use these packages. If you would like to prevent these changes from affecting other scripts, set up a separate virtual environment for the QPCR Analyzer with a tool such as pyenv. In the future, these changes will be moved to a separate GitHub repository. For details on what localfixes.sh does, see [qpcr_analyzer/README.md](qpcr_analyzer/README.md).
+The script [localfixes.sh](qpcr_analyzer/localfixes.sh) applies changes to both OpenPYXL and Ghostscript. These changes will affect your local copies of the OpenPYXL and Ghostscript packages, but should not affect behavior of other scripts that use these packages. If you would like to prevent these changes from affecting other scripts, set up a separate virtual environment for the QPCR Analyzer with a tool such as pyenv. In the future, these changes will be moved to a separate GitHub repository. For details on what [localfixes.sh](qpcr_analyzer/localfixes.sh) does, see [qpcr_analyzer/README.md](qpcr_analyzer/README.md).
 
 Install the [ODM-Import](https://github.com/jeandavidt/ODM-Import) repo (NOTE: This is temporarily set to the fork at [martinwellman/ODM-Import.git](https://github.com/martinwellman/ODM-Import.git), it will be changed back to jeandavidt/ODM-Import soon):
 
@@ -38,3 +38,10 @@ The `ODM-Import` package has various tools and utilities for converting data fil
 To see a bare-bones example of how to use the QPCR Analyzer see [examples/example_fullrun.py](examples/example_fullrun.py). This example extracts data from BioRad output files, maps that data to ODM format, and generates the final report along with QA/QC results. It uses sample BioRad files obtained from a lab based at uOttawa.
 
 For a more complete example, including options for emailing the reports and updating files stored in the cloud, see the [lambda_container](lambda_container).
+
+## TODO
+
+- Split off all code that handles sample IDs to a separate class (to make it easier to deal with differences in sample ID naming between labs).
+- Work with samples file in a more OOP way.
+- Finish [ODM QPCR Analyzer Manual and Spec.docx](ODM%20QPCR%20Analyzer%20Manual%20and%20Spec.docx).
+- Get rid of [localfixes.sh](qpcr_analyzer/localfixes.sh), move the changes/fixes to separate GitHub repos for OpenPYXL and Ghostscript.
