@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <title>ODM QPCR Analyzer Error Report</title>
+</head>
+<body>
+
+<p>
+There was an error while running the ODM QPCR Analyzer. Details of the error are shown below. For assistance, please contact <a href="mailto:{admin_email}">{admin_email}</a>.
+</p>
+
+[[messages]]
+{messages}
+[[/messages]]
+
+[[stack_trace]]
+<p>
+<b>Stack Trace:</b>
+</p>
+<p>
+{stack_trace}
+</p>
+[[/stack_trace]]
+
+[[settings]]
+<p>
+<b>Additional info:</b>
+</p>
+{settings}
+[[/settings]]
+
+<hr />
+<p>
+Total runtime: {runtime}<br />
+Run ID: {runid}<br />
+Instance ID: {instanceid}<br />
+Instance Runs: {instanceruns}<br />
+</p>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <title>ODM QPCR Analyzer Results</title>
+</head>
+<body>
+[[report_files]]<p>
+The following reports have been generated and are attached to this email:
+</p>
+{report_files}
+[[/report_files]]
+
+[[input_files]]<p>
+The following input files were used (See '{inputs_zip_file}'):
+</p>
+{input_files}
+[[/input_files]]
+
+[[raw_files]]<p>
+The following files were extracted from the input files, and can be modified and reuploaded to the analyzer (See '{raw_zip_file}'):
+</p>
+{raw_files}
+[[/raw_files]]
+
+[[updated_files]]<p>
+The following Google Docs spreadsheets have been updated:
+</p>
+{updated_files}
+[[/updated_files]]
+
+[[settings]]<p>
+Additional info:
+</p>
+{settings}
+[[/settings]]
+<p>
+For assistance, please contact <a href="mailto:{admin_email}">{admin_email}</a>.
+</p>
+<hr />
+<p>
+Total runtime: {runtime}<br />
+Run ID: {runid}<br />
+Instance ID: {instanceid}<br />
+Instance Runs: {instanceruns}<br />
+</p>
+</body>
+</html>

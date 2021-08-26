@@ -1,0 +1,415 @@
+body {
+	font-family: 'Open Sans', sans-serif;
+	display: block;
+    margin: 0;
+    padding: 0;
+	background-image: url('/images/odm-logo-15.png');
+	background-repeat: no-repeat;
+	background-position: -200px -200px;
+}
+
+
+
+.main-container, .select-user-container {
+	padding: 15px 25px 0 25px;
+}
+
+.select-user-container-inner {
+	margin: 20px;
+}
+
+.form-container {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+}
+
+.uploader-container-inner, .options-container-inner {
+	margin: 20px;
+}
+
+.uploader-container {
+    flex: 2;
+	overflow: hidden;
+}
+
+.options-container {
+    flex: 1;
+	overflow: hidden;
+}
+
+.line {
+	background-color:  #eee;
+	height: 1px;
+	margin: 9px 0;
+	display: block;
+}
+
+#emails {
+    width: 100%;
+    display: block;
+}
+
+.options-title {
+    display: block;
+    width: 100%;
+	margin: 5px 0;
+	font-weight: bold;
+}
+
+.options-title-data {
+	font-weight: normal;
+}
+
+.options-notes {
+    display: block;
+    width: 100%;
+	margin: 5px 0;
+	font-size: 12px;
+	color: #888;
+}
+
+.multiple_emails-container {
+	background-color: #fff;
+}
+
+.multiple_emails-container ul {
+    margin: 0;  
+    font-size: 14px; 
+}
+
+.multiple_emails-container .email_name {
+	display: block;
+	overflow: hidden;
+}
+
+.multiple_emails-email {
+	margin: 3px;
+	padding: 3px;
+}
+
+.multiple_emails-container input {
+	font-size: 14px;
+    padding: 0 5px 2px 5px;
+}
+
+@font-face {
+    font-family: 'Glyphicons Halflings';
+
+    src: url('/fonts/glyphicons-halflings-regular.eot');
+    src: url('/fonts/glyphicons-halflings-regular.eot?#iefix') format('embedded-opentype'), 
+        url('/fonts/glyphicons-halflings-regular.woff') format('woff'), 
+        url('/fonts/glyphicons-halflings-regular.ttf') format('truetype'), 
+        url('/fonts/glyphicons-halflings-regular.svg#glyphicons_halflingsregular') format('svg');
+}
+
+.glyphicon {
+    position: relative;
+    top: 1px;
+    display: inline-block;
+    font-family: 'Glyphicons Halflings';
+    font-style: normal;
+    font-weight: normal;
+    line-height: 1;
+
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.glyphicon-remove:before {
+    content: "\e014";
+}
+
+h1 {
+    font-size: 26px;
+    margin: 0 0 10px 0;
+    padding: 5px 0;
+    /* background-color: #eeeeff; */
+}
+
+.footer {
+    display:block;
+    text-align: right;
+    /* background: #eeeeff; */
+    margin: 20px 0 0 0;
+    padding: 10px 30px;
+}
+
+.target-container .processing-image {
+	width: 50px;
+	height: 50px;
+	vertical-align: middle;
+	padding: 0;
+}
+
+@media only screen and (max-width: 768px) {
+    .uploader-container, .options-container {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+}
+
+.disabled {
+	color: #ccc;
+}
+
+#drive-folder-id {
+	width: 100%;
+}
+
+/*********************************************************************************************************
+ Formstone Upload
+*********************************************************************************************************/
+
+.processing-message {
+    border: 3px dashed transparent;
+    background: rgba(0,0,0,0.2);
+}
+
+.target-box {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    text-align: center;
+    
+    font-size: 14px;    
+    height:88px; 
+    line-height:80px; 
+    padding:0; 
+    margin:0;
+    
+}
+
+.fs-upload-target {
+    cursor : pointer;
+}
+
+.fs-upload-disabled .fs-upload-target, .no-touch .fs-upload-disabled:hover .fs-upload-target {
+    cursor : default;
+	cursor : not-allowed;
+}
+
+
+.fs-upload {
+    position : relative;
+	overflow : hidden;
+}
+
+.fs-upload, .fs-upload *, .fs-upload :after, .fs-upload :before, .fs-upload:after, .fs-upload:before {
+    -webkit-box-sizing : border-box;
+	box-sizing : border-box;
+	-webkit-transition : none;
+	transition : none;
+	-webkit-user-select : none!important;
+	-moz-user-select : none!important;
+	-ms-user-select : none!important;
+	user-select : none!important;
+}
+
+.fs-upload-input {
+    position : absolute;
+	top : 0;
+	right : 0;
+	bottom : 0;
+	left : 0;
+	z-index:-1px;
+	opacity : 0;
+	pointer-events : none;
+}
+
+.fs-upload-target {
+    cursor : pointer;
+}
+
+.fs-upload-disabled .fs-upload-target, .no-touch .fs-upload-disabled:hover .fs-upload-target {
+    cursor : default;
+	cursor : not-allowed;
+}
+
+.fs-upload.fs-light .fs-upload-target {
+    background : rgba(255,255,255,0.7);
+	border : 3px dashed #607d8b;
+	border-radius : 2px;
+	color : #455a64;
+	font-size : 14px;
+	margin : 0;
+	/* padding : 25px; */
+	text-align : center;
+	-webkit-transition : background .15s linear,border .15s linear,color .15s linear,opacity .15s linear;
+	transition : background .15s linear,border .15s linear,color .15s linear,opacity .15s linear;
+}
+
+.fs-light.fs-upload-dropping .fs-upload-target, .fs-light.fs-upload-focus .fs-upload-target, .no-touchevents .fs-light:hover .fs-upload-target {
+	background  : rgba(207, 216, 220, 0.7);
+	border-color : #546e7a;
+	color : #263238;
+}
+
+.fs-light.fs-upload-disabled {
+    opacity:.5;
+}
+
+.fs-light.fs-upload-disabled .fs-upload-target, .fs-light.fs-upload-disabled.fs-upload-dropping .fs-upload-target, .fs-light.fs-upload-disabled.fs-upload-focus .fs-upload-target, .no-touchevents .fs-light.fs-upload-disabled.fs-upload-dropping:hover .fs-upload-target, .no-touchevents .fs-light.fs-upload-disabled:hover .fs-upload-target {
+    background : #fff;
+	border-color : #607d8b;
+	color : #455a64;
+}
+
+/*********************************************************************************************************
+ Upload file lists (queue, complete)
+*********************************************************************************************************/
+
+.filelists {
+	margin: 20px 0 0 0;
+}
+
+.filelists h5 {
+	margin: 10px 0 0;
+}
+
+.filelists_empty {
+	font-size: 12px;
+	margin: 10px 0 0 5px;
+	color: #aaa;
+}
+
+.filelists .analyzer_buttons {
+	padding-top: 5px;
+	display: block;
+}
+
+.button {
+	background: #678fe0;
+	border: 0;
+	color: #fff;
+	cursor: pointer;
+	clear: both;
+	display: inline-block;
+	font-size: 12px;
+	margin: 0 10px 0 0;
+	padding: 8px 12px;
+	/* text-transform: uppercase; */
+}
+
+.button:active {
+	background: #476fc0;
+}
+
+.settings-button {
+	margin: 5px 0 0 0;
+}
+
+.settings-suboptions {
+	margin-left: 22px;
+}
+
+.settings-subgrouped {
+	border-left : 10px solid #ccccff;
+	padding-left: 10px;
+	margin-left: 22px;
+	margin-top: 9px;
+}
+
+.button:disabled {
+	background: #aaaaaa;
+	color: #eeeeee;
+	cursor: default;
+}
+
+/* .filelists .disabled {
+	background: #aaaaaa;
+	color: #eeeeee;
+	cursor: default;
+} */
+
+.filelists .cancel_all {
+	color: red;
+	cursor: pointer;
+	clear: both;
+	display: inline-block;
+	font-size: 10px;
+	margin: 0;
+	text-transform: uppercase;
+}
+
+.filelist {
+	margin: 0;
+	padding: 10px 0;
+}
+
+.filelist li {
+	background: rgba(255, 255, 255, 0.5);
+	border-bottom: 1px solid #ECEFF1;
+	font-size: 14px;
+	list-style: none;
+	padding: 5px;
+	position: relative;
+}
+
+.filelist li:before {
+	display: none !important;
+}
+/* main site demos */
+
+.filelist li .bar {
+	background: rgba(190,190,235,0.4);
+	content: '';
+	height: 100%;
+	left: 0;
+	position: absolute;
+	top: 0;
+	width: 0;
+	z-index: 0;
+	-webkit-transition: width 0.1s linear;
+	transition: width 0.1s linear;
+}
+
+.filelist li .content {
+	display: block;
+	overflow: hidden;
+	position: relative;
+	z-index: 1;
+}
+
+.filelist li .file {
+	color: #455A64;
+	float: left;
+	display: block;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 95%;
+	white-space: nowrap;
+}
+
+.filelist li .progress {
+	color: #A0AEB5;
+	display: block;
+	float: right;
+	font-size: 10px;
+        margin: 1px 0 0 10px;
+	text-transform: uppercase;
+}
+
+.filelist li .cancel {
+	color: red;
+	cursor: pointer;
+	display: block;
+	float: right;
+	font-size: 10px;
+        margin: 1px 0 0 10px;
+	text-transform: uppercase;
+}
+
+.filelist li.error .file {
+	color: red;
+}
+
+.filelist li.error .progress {
+	color: red;
+}
+
+.filelist li.error .cancel {
+	display: none;
+}
+
+

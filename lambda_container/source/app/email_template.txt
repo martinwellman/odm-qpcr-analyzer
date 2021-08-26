@@ -1,0 +1,28 @@
+[[report_files]]The following reports have been generated and are attached to this email:
+
+{report_files}
+
+[[/report_files]][[input_files]]The following input files were used (See '{inputs_zip_file}'):
+
+{input_files}
+
+[[/input_files]][[raw_files]]The following files were extracted from the input files, and can be modified and reuploaded as input to the analyzer (See '{raw_zip_file}'):
+
+{raw_files}
+
+[[/raw_files]][[updated_files]]The following Google Docs spreadsheets have been updated:
+
+{updated_files}
+
+[[/updated_files]][[settings]]Additional info:
+
+{settings}
+
+[[/settings]]For assistance, please contact {admin_email}.
+
+-----
+Total runtime: {runtime}
+Run ID: {runid}
+Instance ID: {instanceid}
+Instance Runs: {instanceruns}
+

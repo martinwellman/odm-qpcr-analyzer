@@ -1,0 +1,21 @@
+There was an error while running the ODM QPCR Analyzer. Details of the error are shown below. For assistance, please contact {admin_email}.[[messages]]
+
+{messages}
+
+[[/messages]][[stack_trace]]Stack Trace:
+------------
+
+{stack_trace}
+
+[[/stack_trace]][[settings]]Additional info:
+----------------
+
+{settings}
+
+[[/settings]]For assistance, please contact {admin_email}.
+
+-----
+Total runtime: {runtime}
+Run ID: {runid}
+Instance ID: {instanceid}
+Instance Runs: {instanceruns}

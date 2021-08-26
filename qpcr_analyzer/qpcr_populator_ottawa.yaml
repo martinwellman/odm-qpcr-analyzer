@@ -1,0 +1,100 @@
+#
+#
+#
+
+input : {
+    measure_sheet_name : "ww_measure",
+    sample_sheet_name : "sample",
+    method_pcr_col : "methodPcr",
+    assay_method_col : "assayID",
+    assay_method_assay_method_col : "assayMethodID",
+    analysis_date_col : "analysisDate",
+    sample_date_col : "dateTime",
+    sample_id_col : "sampleID",
+    gene_type_col : "type",
+    value_col : "value",
+    index_col : "index",
+    unit_col : "unit",
+    unit_other_col : "unitOther",
+    qa_col : "qualityFlag",
+    site_id_col : "siteID",
+
+    sample_type_col : "type",
+    sample_short_description_col : "typeShortDescription",
+    sample_description_col : "typeDescription",
+
+    plate_id_col : "plateID",
+    standard_curve_id_col : "standardCurveID",
+
+
+
+    lab_id : "ottawa_lab",
+    lab_id_separator : "-",
+
+    unknown_site : "<unk>",
+
+    # For calculating slope and intercept internally (ie. not from the Excel spreadsheet), use at most
+    # this many replicates for each standard. This should usually match the number of standards
+    # shown in the Excel spreadsheet 
+    slope_and_intercept_replicates : 3,
+
+    # If True, then all unknowns must have a standard curve on the same plate. Those that don't will be removed.
+    # If False, then if a standard curve is missing on a plate, we'll try to use the most recent one
+    require_cal_curve_on_same_plate : True,
+
+    remove_time_cols : ["analysisDate", "sample_dateTime"],
+
+    # Sort all rows in the master input sheet by these columns. Sorted by last item in order_by first.
+    order_by : ["sample_dateTime", "sampleID", "index"],
+
+    main_genes : [
+        "covN1",
+        "covN2",
+        "covN3",
+        # "d3",
+        # "d3l_del",
+    ],
+
+    other_genes : [
+        "nPMMoV",
+        "nPMMoV_dil10",
+        "nPMMoV_dil40",
+    ],
+
+    # Each of these genes share the same standard curve as the dictionary key
+    standard_curve_common_genes : {
+        "nPMMoV" : [ "nPMMoV", "nPMMoV_dil10", "nPMMoV_dil40" ],
+    },
+
+    dropna_cols : [
+        "type",
+    ],
+
+    # For samples with the specified gene that have a sample ID that match the regex sample_rerun_number, we
+    # take the latest rerun and drop all other samples with the same sample ID. The rerun number
+    # is the first capture of the regular expression. The resulting sample ID is the first capture of sample_rerun_id.
+    collapse_reruns : {
+        genes : [ "nPMMoV" ],
+        sample_rerun_number : "_r([0-9]*)$",
+        sample_rerun_id : "(.*)_r[0-9]*$",
+    },
+
+    calibration_multi : {
+        min_points : 5,
+        preferred_slope : -3.3,
+    },
+}
+    
+template : {
+    main_sheet_name : "Main",
+    calibration_sheet_name : "Calibration",
+    calibration_location : "main_sheet",    # "main_sheet" | "cal_sheet" | "calgene_sheet" | "hide"
+    rows_between_main_groups : 0,
+    rows_between_cal_groups : 1,
+    main_banners_and_headers_once : False,
+    cal_origin : [2, 2],
+    main_origin : [1, 1],
+    chart_column_spacing : 0,
+    max_chart_height_rows : 10,
+    main_sheet_freeze_panes : "B1",
+}

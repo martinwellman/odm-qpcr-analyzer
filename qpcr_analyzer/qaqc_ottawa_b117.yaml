@@ -1,0 +1,84 @@
+qaqc_priorities : [
+    # Highlighting of priorities earlier in this list take precedence (ie. more serious errors should go first)
+    {
+        name : "Very High",
+        fill : "FFFF00",
+        font : "000000",
+        bold : True,
+    },
+    {
+        name : "High",
+        fill : "FF8C8C",
+        font : "9E0000",
+        bold : True,
+    },
+    {
+        name : "Low",
+        fill : "BFBFBF",
+        font : "3D3D3D",
+        bold : False,
+    },
+    {
+        name : "Good",
+        fill : "00CE00",
+        font : "000000",
+        bold : True,
+    },
+]
+
+no_detections : [
+    {
+        category : "Ct Detection",
+        description : "Samples require amplification",
+        priority : "Very High",
+        columns : ["main_col_ct", "main_col_ct_b", "main_col_ct_c"],
+        genes : [],
+        min_detections : 1,
+        individual_columns : True,
+    }
+]
+
+main_ct_outliers : [
+    {
+        category : "Ct in Range",
+        description : "Values in range {range}",
+        priority : "Low",
+        range : [ NULL, 40 ],
+        # min_replicates : 2,
+        # max_replicates : 3,
+        genes : [ ],
+        columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
+    },
+    # {
+    #     category : "Ct Outliers",
+    #     description : "Standard deviation Ct above {max_stdev}",
+    #     priority : "Low",
+    #     max_stdev : 0.5,
+    #     min_replicates : 2,
+    #     max_replicates : 3,
+    #     genes : [ ],
+    #     columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
+    # },
+]
+
+# NOTE: ct_outliers are not stored in the output QAQC sheet. They are marked by adding
+# square brackets around the Ct values.
+# main_ct_outliers : {
+#     category : "Ct Outliers",
+#     description : "Standard deviation Ct above {max_stdev}",
+#     priority : "Low",
+#     max_stdev : 0.5,
+#     min_replicates : 2,
+#     max_replicates : 3,
+#     genes : [ ],
+#     columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
+# }
+
+conditional_formatting : [
+    {
+        priority : "Good",
+        test : "{col='QAQC Check'}{row}",
+        format_columns : [ "{col='QAQC Check'}{row}", "{col='D3L/D3 Ratio'}{row}", "{col='SD of ratio'}{row}" ],
+    }
+]
+

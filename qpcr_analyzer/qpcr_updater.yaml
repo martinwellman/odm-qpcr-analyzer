@@ -1,0 +1,11 @@
+#
+#
+#
+
+site_column : "site"
+
+main_worksheet : "Main"
+
+# If all these source headers are found in the input file then we can go ahead and copy all rows to the target file.
+# Otherwise we assume the source file isn't in the correct format.
+required_source_headers : ["sample_id", "site"]
