@@ -2,6 +2,8 @@
 
 The QPCR Analyzer website allows users to upload BioRad files and launch the QPCR Analyzer on AWS Lambda to receive reports by email. The website requires that the QPCR Analyzer Lambda function has already been set up. See [lambda_container](../lambda_container) for details on setting up the Lambda function.
 
+The website will eventually be replaced with a more feature-rich "Conductor", and so little attention to security and feature implementation has been made. The deployed website should be password protected by your web server software, such as Apache or NGINX.
+
 The website is currently deployed on the Cryotoad website at [https://qpcr.cryotoad.com](https://qpcr.cryotoad.com). This site is password protect.
 
 ## Installation
