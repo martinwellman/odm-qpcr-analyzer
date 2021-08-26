@@ -4,6 +4,8 @@ The Open Data Model (ODM) for Wastewater-Based Surveillance is an open data mode
 
 The ODM QPCR Analyzer is a tool that sits on top of the ODM and automates the analysis of QPCR results obtained from a BioRad QPCR machine. It also performs a full QA/QC on the obtained data. The tool also provides a means for the user to upload approved data to a Google Drive folder or AWS S3 bucket (HTTP and HTTPS targets will be added soon).
 
+For a more complete look at the Analyzer and its various components with details on the code and how to customize the reports, see [ODM QPCR Analyzer Manual and Spec.docx](ODM%20QPCR%20Analyzer%20Manual%20and%20Spec.docx).
+
 ## Main Components
 
 The ODM QPCR Analyzer has 3 main components:
