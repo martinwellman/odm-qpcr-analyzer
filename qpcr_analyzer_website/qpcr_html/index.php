@@ -49,12 +49,12 @@ function mfile($file) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
-    <script src="/formstone/dist/js/core.js"></script>
-    <script src="/formstone/dist/js/upload.js"></script>
+    <script src="/Formstone/dist/js/core.js"></script>
+    <script src="/Formstone/dist/js/upload.js"></script>
     <script src="<?php mfile("/multiple-emails/multiple-emails.js") ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.0/dist/js.cookie.min.js"></script>
     <link href="/multiple-emails/multiple-emails.css" rel="stylesheet">
-    <link href="/formstone/dist/css/upload.css" rel="stylesheet">
+    <link href="/Formstone/dist/css/upload.css" rel="stylesheet">
     <link href="<?php mfile("/css/main.css") ?>" rel="stylesheet">
 </head>
 <body>
