@@ -34,7 +34,7 @@ qpcr_analyzer_website/qpcr_html/includes/settings.php
 qpcr_analyzer_website/qpcr_other/
 qpcr_analyzer_website/composer.phar
 qpcr_analyzer_website/qpcr_html/Formstone/
-qpcr_analyzer_website/qpcr_html/multiple-emails/
+# qpcr_analyzer_website/qpcr_html/multiple-emails/
 qpcr_analyzer_website/qpcr_html/vendor/
 
 # All links in the Lambda container
