@@ -8,7 +8,7 @@ The website is currently deployed on the Cryotoad website at [https://qpcr.cryot
 
 ## Installation
 
-Formstone is used to manage the upload form. To install the required components, from within the qpcr_html directory run:
+Formstone is used for the upload form. To install Formstone, from within the `qpcr_html` directory run:
 
     git clone \
         --depth 1  \
@@ -18,14 +18,18 @@ Formstone is used to manage the upload form. To install the required components,
     cd Formstone
     git sparse-checkout set dist
 
-The Google API Client and AWS PHP SDK must be installed with [Composer](https://getcomposer.org). To install Composer, from the qpcr_analyzer_website directory run:
+Multiple-emails.js is used to allow users to enter email addresses. To install multiple-emails, from within the `qpcr_html` directory run:
+
+    git clone https://github.com/pierresh/multiple-emails.js.git
+
+The Google API Client and AWS PHP SDK must be installed with [Composer](https://getcomposer.org). To install Composer, from the `qpcr_analyzer_website` directory run:
 
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     php -r "if (hash_file('sha384', 'composer-setup.php') === '756890a4488ce9024fc62c56153228907f1545c228516cbf63f885e036d37e9a59d27d63f46af1d4d07ee0f76181c7d3') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
     php composer-setup.php
     php -r "unlink('composer-setup.php');"
 
-To instsall the Google API Client and the AWS PHP SDK, from the same qpcr_analyzer_website directory, run:
+To instsall the Google API Client and the AWS PHP SDK, from the same `qpcr_analyzer_website` directory, run:
 
     COMPOSER=../composer.json php composer.phar install --working-dir qpcr_html
 
