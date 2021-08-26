@@ -7,7 +7,6 @@
 require_once "users.php";
 
 define('S3_BUCKET',                         "odm-qpcr-analyzer");
-// define('S3_BUCKET',                         "odm-qpcr-analyzer-ohri");
 
 // Set ALLOWABLE_EMAILS to [] to allow any email as long as it or its domain has been verified by AWS SES. If ALLOWABLE_EMAILS contains emails and/or domains
 // then recipient emails must match in *both* ALLOWABLE_EMAILS and AWS SES. Items without an @ (eg. cryofrog.com) are treated as wildcard domains.
@@ -19,14 +18,14 @@ define('S3_INPUTS_ROOT',                    "u/{$USERNAME}/inputs/");
 define("ALLOW_POST",                        true);
 define("ALLOW_GET",                         true);
 
-define("CONTACT_EMAIL",                     "mwellman@ohri.ca");
+define("CONTACT_EMAIL",                     "admin@example.com");
 
 define("UPLOADS_DIR_MAXSIZE",               2000);   // In MB
 define("SESSION_DIR_MAXSIZE",               500);    // In MB
 
 // Sent to Lambda function
 define("LAMBDA_FUNCTION",                   "odm-qpcr-analyzer");
-define("LAMBDA_FROM_EMAIL",                 "ODM QPCR Analyzer <odm@cryotoad.com>");
+define("LAMBDA_FROM_EMAIL",                 "ODM QPCR Analyzer <odm@example.com>");
 define("LAMBDA_SAMPLES",                    "");
 define("LAMBDA_SITES_FILE",                 "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/sites.xlsx");
 define("LAMBDA_SITES_CONFIG",               "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/sites.yaml");

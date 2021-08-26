@@ -354,6 +354,7 @@ function run_analyzer() {
             "extracter_config" => LAMBDA_EXTRACTER_CONFIG,
             "qaqc_config" => OUTPUT_FORMATS[$output_format]["qaqc_config"],
             "populator_config" => OUTPUT_FORMATS[$output_format]["populator_config"],
+            "updater_config" => OUTPUT_FORMATS[$output_format]["updater_config"],
             "mapper_config" => LAMBDA_MAPPER_CONFIG,
             "mapper_map" => LAMBDA_MAPPER_MAP,
             "populator_template" => OUTPUT_FORMATS[$output_format]["populator_template"],

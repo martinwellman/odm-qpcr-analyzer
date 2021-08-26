@@ -55,7 +55,7 @@ DISABLE_ALL_EMAILS = False
 TEMP_DIR = None            # Set to None (preferred) to get a new tempdir with tempfile.gettempdir()
 OVERRIDE_RUNID = None      # Set to None (preferred) to create a new unique run ID
 DELETE_TEMP_DIR = True     # Set to True (preferred) to delete the temp dir once done
-UPLOAD_RESULTS = True
+UPLOAD_RESULTS = False
 
 ADMIN_EMAIL = "mwellman@ohri.ca"
 DEFAULT_FROM_EMAIL = "ODM QPCR Analyzer <odm@cryotoad.com>"
@@ -647,6 +647,6 @@ def handler(event, context):
 if __name__ == "__main__" and "get_ipython" in globals():
     # For running in Jupyter notebook as main
     import json
-    with open("../../event.json", "r") as f:
+    with open("../../../../event.json", "r") as f:
         data = EasyDict(yaml.safe_load(f))
     handler(data, None)

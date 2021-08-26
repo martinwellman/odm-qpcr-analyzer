@@ -48,6 +48,7 @@ ln -sf "$ANALYZER_DIR/qpcr_analyzer/qpcr_populator_ottawa.yaml" qpcr_populator_o
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/qpcr_populator_ottawa_wide_diff.yaml" qpcr_populator_ottawa_wide_diff.yaml
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/qpcr_populator_ottawa_b117_diff.yaml" qpcr_populator_ottawa_b117_diff.yaml
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/qpcr_updater.yaml" qpcr_updater.yaml
+ln -sf "$ANALYZER_DIR/qpcr_analyzer/qpcr_updater_b117.yaml" qpcr_updater_b117.yaml
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/credentials.json" credentials.json
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/sites.xlsx" sites.xlsx
 ln -sf "$ANALYZER_DIR/qpcr_analyzer/sites.yaml" sites.yaml

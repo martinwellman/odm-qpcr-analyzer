@@ -32,7 +32,7 @@ while true; do
         break
     fi
     printf "."
-    sleep 1
+    sleep 2
 done
 
 echo "Instance ID: $INSTANCE_ID"

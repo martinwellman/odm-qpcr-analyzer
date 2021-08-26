@@ -32,7 +32,7 @@ aws s3 cp source s3://$ANALYZER_BUCKET/v/$QPCR_VERSION/source --recursive
 # Create an EC2 instance
 NEW_RUN_SCRIPT="~$RUN_SCRIPT$(date +%F_%H_%M_%S).sh"
 touch "$NEW_RUN_SCRIPT"
-chmod u+ "$NEW_RUN_SCRIPT"
+chmod u+x "$NEW_RUN_SCRIPT"
 cat settings.sh >> "$NEW_RUN_SCRIPT"
 printf "\n\n" >> "$NEW_RUN_SCRIPT"
 printf "QPCR_VERSION="$QPCR_VERSION"" >> "$NEW_RUN_SCRIPT"
