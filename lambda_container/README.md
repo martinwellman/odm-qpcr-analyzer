@@ -3,6 +3,10 @@
 
 The Lambda Container is all the code required to run the QPCR Analyzer as an AWS Lambda Function. Included here are shell scripts to build the Docker container on an AWS EC2 instance, upload the container to AWS ECR, and publish the container to AWS Lambda.
 
+## Running the Shell Scripts
+
+The scripts [copyfiles.sh](copyfiles.sh), [linkfiles.sh](linkfiles.sh), [makedockeronec2.sh](makedockeronec2.sh), [makeec2ami.sh](makeec2ami.sh), and [publish_version.sh](publish_version.sh) have been tested on MacOS 11.2.2 only. Ideally these would be rewritten in Python for broader support (contributions are welcome). The other scripts are run remotely on AWS Amazon Linux 2 instances so do not have requirements for your development environment.
+
 ## Verify Emails for AWS SES
 
 The Lambda Container uses AWS SES to send emails. If your account is sandboxed, you will have to verify emails before you can send to them. Verification can be performed on specific emails and on entire domains (if you own the domain). To verify an email or domain, go to the **AWS Simple Email Service** dashboard and select "Domains" or "Email Addresses" under "Identity Management". For email verification you will have to click a link in an email sent to that address. For domain verification you will have to modify the domain's DNS entries.
