@@ -38,3 +38,62 @@ The `ODM-Import` package has various tools and utilities for converting data fil
 To see a bare-bones example of how to use the QPCR Analyzer see [examples/example_fullrun.py](examples/example_fullrun.py). This example extracts data from BioRad output files, maps that data to ODM format, and generates the final report along with QA/QC results. It uses sample BioRad files obtained from a lab based at uOttawa.
 
 For a more complete example, including options for emailing the reports and updating files stored in the cloud, see the [lambda_container](lambda_container).
+
+## Managing AWS Costs
+
+It is recommended to regularly check your billing to ensure there are no unexpected AWS charges. This section describes the AWS services used and how to delete unused resources.
+
+The Lambda container uses the following services on AWS:
+
+- AWS S3
+- AWS Lambda
+- AWS SES
+- AWS ECR
+- AWS EC2
+
+It also uses the Google Drive API.
+
+### S3 File Structure
+
+The file structure on S3 is as follows:
+
+    s3bucket (eg. odm-qpcr-analyzer)
+        - u (User data)
+            - UserA
+                - inputs
+                - outputs
+            - UserB
+                - inputs
+                - outputs
+            ...
+        - v (Analyzer version data)
+            - 0.1.15
+                - config
+                - source
+            - 0.1.16
+                - config
+                - source
+            ...
+
+### S3 Folder /v: Version Source Code and Config
+
+Each version created with [makedockeronec2.sh](makedockeronec2.sh) has configuration files and source code uploaded to `/v/{version}`. Any old versions that are no longer used can be deleted. The `source` subfolder for a version can be deleted, it is only used while building the Lambda function Docker container, to transfer code from your local environment to EC2. The `config` subfolder should be preserved for versions still in use. It contains all configuration files for the Analyzer. You can update configuration files by uploading changes to the `config` subfolder. See the [S3 dashboard](https://console.aws.amazon.com/s3/home).
+
+### S3 Folder /u: User Files
+
+Each web user has their own data folder in /u/{user} (eg. /u/Martin). The `inputs` subfolder contains inputs uploaded from the website, while the `outputs` folder contains the outputs of the Analyzer. These folders can be deleted, although it is recommended to not delete recently added folders under `inputs` in case an analyzer run is currently in progress and still requires those input files (the subfolders have the date and time in their names, in Eastern time). See the [S3 dashboard](https://console.aws.amazon.com/s3/home).
+
+### ECR Private Repositories
+
+A private repository is added by the [makedockeronec2.sh](makedockeronec2.sh) script. Built Docker containers are added here. Any old and unused builds can be deleted to reduce costs. See the [ECR Dashboard](https://console.aws.amazon.com/ecr/repositories).
+
+## EC2 Instances
+
+All EC2 instances are terminated automatically when complete. The scripts use t2.micro instances by default, which are free-tier eligible. You may want to regularly monitor EC2 usage and check to make sure no stray instances have been left running. See the [EC2 Instances Dashboard](https://console.aws.amazon.com/ec2/v2/home#Instances:).
+
+## EC2 Images and Snapshots
+
+An EC2 AMI is created by [makeec2ami.sh](makeec2ami.sh). If you run this script multiple times then you may want to delete old AMIs that are no longer being used. See the [EC2 AMIs Dashboard](https://console.aws.amazon.com/ec2/v2/home#Images:sort=name).
+
+EBS snapshots are also created for the AMI. Snapshots that are no longer used can be deleted. See the [EC2 EBS Snapshots Dashboard](https://console.aws.amazon.com/ec2/v2/home#Snapshots:sort=snapshotId).
+
