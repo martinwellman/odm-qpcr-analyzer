@@ -2,14 +2,11 @@
 
 This module calculate literal values for all formulas in an Excel file loaded with openpyxl. The values are calculated with pycel, and custom support is added for saving these values to disk when saving the Excel file.
 
-This requires a custom version of openpyxl with the following changes:
-
-1. find /var/lang/lib/python3.8/site-packages/openpyxl/cell -name cell.py | xargs sed -i.bak "s/'_value',/'_value', 'calculated_value', 'attached_data',/g"
-1. find /var/lang/lib/python3.8/site-packages/openpyxl/cell -name cell.py | xargs sed -i.bak "s/'row', 'column'/'row', 'column', 'calculated_value', 'attached_data'/g"
-1. find /var/lang/lib/python3.8/site-packages/openpyxl/cell -name _writer.py | xargs sed -i.bak "s/^            value = None/            value = getattr(cell, 'calculated_value', None)\n            if isinstance(value, str):\n                if len(value) > 0 and value[0] == '#' and value[-1] in ['!', '?']:\n                    el.set('t', 'e')\n                else:\n                    el.set('t', 'str')/g"
-1. find /var/lang/lib/python3.8/site-packages/openpyxl/cell -name _writer.py | xargs sed -i.bak "s/^                    value = None/                    raise RuntimeError('Must implement custom calculated_value for LXML')/g"
+This requires a custom version of openpyxl. To apply these changes, see [localfixes.sh](localfixes.sh).
 
 **NOTE:** These changes should be made in a branch sometime in the future, rather than made directly on the master openpyxl.
+
+These changes can be applied by running [localfixes.sh](localfixes.sh).
 
 Openpyxl uses the \__slots__ attribute for cell classes, preventing us from adding custom attributes to objects of the class. We therefore modify both openpyxl.Cell and openpyxl.MergedCell with an additional `calculated_value` member in the classes' \__slots__. The `attached_data` member also added by the above is not for calculating formula values, but is instead used by other QPCR utilities to attach pd.DataFrame rows to cells (`attached_data` is a list of rows), so can be removed if not required. `calculated_value` is the literal value, and is saved to the Workbook when serializing to disk.
 
