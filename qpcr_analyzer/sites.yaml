@@ -1,17 +1,17 @@
 unknown_siteid : "<unk>"
+unknown_parentid : "<unk>"
+unknown_site_title : "<unk>"
+unknown_parent_site_title : "<unk>"
+unknown_sample_type : "<unk>"
 
 columns : {
-    region : {
-        column : "Site Region",
-    },
-
-    site_title : {
-        column : "Site Location",
-    },
-
     siteid : {
         column : "Site ID",
         make_lower : True,
+    },
+
+    site_title : {
+        column : "Site Title",
     },
 
     siteid_aliases : {

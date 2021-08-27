@@ -94,17 +94,21 @@ class QPCRExtracter(object):
         config file) has expired.
         """
         if self.samples_file:
-            # Download the samples file or use a local cached version if the TTL hasn't expired
-            base_name = self.samples_file
-            base_name = re.sub("[^\w\s-]", "_", base_name)
-            base_name = re.sub("[-\s]+", "-", base_name)
-            base_name = f"samples_file.{base_name}.xlsx"
-            self.downloaded_samples_file = self.make_temp_dir_filename(base_name)
-            samples_ttl = self.config.samples_excel.get("samples_file_cache_ttl", None)
-            if not os.path.exists(self.downloaded_samples_file) or samples_ttl is None or time.time() - os.path.getmtime(self.downloaded_samples_file) >= samples_ttl:
-                self.downloaded_samples_file = cloud_utils.download_file(self.samples_file, self.downloaded_samples_file)
+            if cloud_utils.is_local(self.samples_file):
+                print(f"Loading local samples file at {self.samples_file}")
+                self.downloaded_samples_file = None
             else:
-                print(f"Using cached samples file at {self.downloaded_samples_file}")                    
+                # Download the samples file or use a local cached version if the TTL hasn't expired
+                base_name = self.samples_file
+                base_name = re.sub("[^\w\s-]", "_", base_name)
+                base_name = re.sub("[-\s]+", "-", base_name)
+                base_name = f"samples_file.{base_name}.xlsx"
+                self.downloaded_samples_file = self.make_temp_dir_filename(base_name)
+                samples_ttl = self.config.samples_excel.get("samples_file_cache_ttl", None)
+                if not os.path.exists(self.downloaded_samples_file) or samples_ttl is None or time.time() - os.path.getmtime(self.downloaded_samples_file) >= samples_ttl:
+                    self.downloaded_samples_file = cloud_utils.download_file(self.samples_file, self.downloaded_samples_file)
+                else:
+                    print(f"Using cached samples file at {self.downloaded_samples_file}")                    
 
             samples_file = self.downloaded_samples_file or self.samples_file
 
@@ -402,7 +406,6 @@ class QPCRExtracter(object):
                     date = other_dates.iloc[0]
             self.full_df.loc[missing_dates, self.config.source_analysis_date_col] = date
         except Exception as e:
-            raise e
             cols = [v[0] for v in self.config.samples_excel.copy_samples_cols_arr]
             cols.append(self.config.samples_excel.sample_date_col_arr[0])
             cols = list(dict.fromkeys(cols))
@@ -418,7 +421,6 @@ class QPCRExtracter(object):
             return
         self.full_df[self.sites.get_siteid_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_siteid)
         self.full_df[self.sites.get_site_title_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_site_title)
-        self.full_df[self.sites.get_region_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_region)
         self.full_df[self.sites.get_siteid_aliases_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_siteid_aliases)
         self.full_df[self.sites.get_parentid_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_parentid)
         self.full_df[self.sites.get_parent_title_column()] = self.full_df[self.config.cleaned_sample_id_col].map(self.sites.get_sample_parent_title)
@@ -706,7 +708,7 @@ class QPCRExtracter(object):
                 df = pd.concat([df, cur_df], ignore_index=True)
 
         if output_file and self.save_raw:
-            print("Saving raw extraction...")
+            print(f"Saving raw extraction to {output_file}")
             sheets = {str(self.config.data_sheet) : df}
             self.save_df(sheets, output_file, upload=False)
 
@@ -770,10 +772,18 @@ if __name__ == "__main__":
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N2_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",                
 
                 # Aug 9
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 PMMoV VC Aug 9 Aw Aug 9.pdf",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 PMMoV O Aug 9 H Aug 5 7 8 CSC Aug 6 AC Aug 5 6 VC1 Aug 9 S.pdf",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 N2 O Aug 9 H Aug 5 6 7 Ac Aug  5 6 Aw Aug 5 VC Aug 9 S.pdf",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 N1 O Aug 9 H Aug 5 7 8 CSC Aug 9 Ac Aug 5 6 VC Aug 9 Aw Aug 9 EVR S.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 PMMoV VC Aug 9 Aw Aug 9.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 PMMoV O Aug 9 H Aug 5 7 8 CSC Aug 6 AC Aug 5 6 VC1 Aug 9 S.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 N2 O Aug 9 H Aug 5 6 7 Ac Aug  5 6 Aw Aug 5 VC Aug 9 S.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 N1 O Aug 9 H Aug 5 7 8 CSC Aug 9 Ac Aug 5 6 VC Aug 9 Aw Aug 9 EVR S.pdf",
+
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error/qPCR-2021-08-26_N1_UO_14 SAMPLES_WT.pltd.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error/qPCR-2021-08-26_N2_UO_14 SAMPLES_WT.pltd.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error/qPCR-2021-08-26_PEPPER_UO_1-7 SAMPLES_WT.pltd.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error/qPCR-2021-08-26_PEPPER_UO_7-14 SAMPLES_WT.pltd.pdf",
+
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error-b/qPCR-2021-08-26_N1_UO_14 SAMPLES_WT.pltd.pdf",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/error-b/qPCR-2021-08-26_N2_UO_14 SAMPLES_WT.pltd.pdf",
 
                 # BioRad new test
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-newtest/qPCR-2021-07-30_N1_N2_O_NFG_UO_11 SAMPLES_KB.pltd.pdf",
@@ -789,7 +799,7 @@ if __name__ == "__main__":
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-aug9.xlsx",
+            "output_file" : "merged-errb.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,
@@ -799,6 +809,7 @@ if __name__ == "__main__":
         # above in the opts dictionary (where it says "<samples path here>")
         with open("../../samples.yaml", "r") as f:
             samples = EasyDict(yaml.safe_load(f))
+            print(f"Overriding samples argument with: {samples.samples}")
             opts["samples"] = samples.samples
     else:
         args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

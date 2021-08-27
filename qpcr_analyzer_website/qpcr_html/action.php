@@ -362,10 +362,10 @@ function run_analyzer() {
             "split_by_site" => $split_by_site,
             "tokens" => $tokens ? json_encode($tokens) : "",
             "remote_target" => $update_remote ? OUTPUT_FORMATS[$output_format]["lambda_remote_target"] : "",
-            "populated_output_file" => LAMBDA_POPULATED_OUTPUT_FILE,
+            "populated_output_file" => $split_by_site ? LAMBDA_POPULATED_OUTPUT_FILE_SPLIT : LAMBDA_POPULATED_OUTPUT_FILE_ALL,
             "descriptive_settings" => $descriptive_settings,
             "parent_drive_folder" => $parent_drive_folder,
-            "hide_qaqc" => false, #$update_remote,
+            "hide_qaqc" => false,
         ])
         ]);
         

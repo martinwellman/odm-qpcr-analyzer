@@ -117,6 +117,20 @@ def set_allow_flow(allow):
     global allow_flow
     allow_flow = allow
 
+def test_access_token():
+    """Test if the access token and credentials are valid and will us to access the Google Drive service.
+
+    Returns
+    -------
+    True if we can access Google Drive service, False if we can't (typically means the access token has
+    expired and needs refreshing).
+    """
+    try:
+        _ = get_drive_service()
+        return True
+    except:
+        return False
+
 def get_drive_service():
     """Get a Google Drive service for making Google Drive API calls.
     """

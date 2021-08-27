@@ -54,6 +54,7 @@ from qpcr_utils import (
     REPLICATE_NUM,
     MAIN_ROW_DATA,
     CAL_ROW_DATA,
+    PARSE_VALUES_REGEX,
     points_to_cm,
     estimated_cm_to_chars,
     add_sheet_name_to_colrow_name,
@@ -64,6 +65,7 @@ from qpcr_utils import (
     strip_quotes,
     excel_addr_to_fixed,
     sheet_to_df,
+    parse_values,
 )
 import custom_functions
 from custom_functions import (
@@ -72,12 +74,8 @@ from custom_functions import (
     CUSTOM_FUNC_SEP,
 )
 
-# Regex for searching for tags, eg {value_0|MISSING}. MISSING is alternate text to include if the tag is not available.
-PARSE_VALUES_REGEX = "\{(%s)(:?[^\s|]*)(\|?[^\}]*)\}"
-PARSE_VALUES_REGEX_ANYKEY = re.compile(PARSE_VALUES_REGEX % "[0-9A-Za-z_\.]*", flags=re.IGNORECASE)
-
 class QPCRPopulator(object):
-    def __init__(self, input_file, template_file, target_file, overwrite, config_file, qaqc_config_file, sites_config, sites_file, split_by_site=False, hide_qaqc=False):
+    def __init__(self, input_file, template_file, target_file, overwrite, config_file, qaqc_config_file, sites_config, sites_file, hide_qaqc=False):
         super().__init__()
         self.hide_qaqc = hide_qaqc
         self.input_file = input_file
@@ -89,7 +87,6 @@ class QPCRPopulator(object):
         # self.qaqc_config_file = qaqc_config_file if qaqc_config_file is None or isinstance(qaqc_config_file, (list, tuple, np.ndarray)) else [qaqc_config_file]
         self.worksheets_info = []
         self.late_binders = []
-        self.split_by_site = split_by_site
         self.format_args = {}
 
         self.config = load_config(self.config_file)
@@ -608,7 +605,7 @@ class QPCRPopulator(object):
         v = cell.value
         attached_data = []
         try:
-            v, attached_data = self.parse_values(v, **self.format_args)
+            v, attached_data = parse_values(v, **self.format_args)
         except Exception as e:
             v = str(e)            
 
@@ -778,96 +775,96 @@ class QPCRPopulator(object):
             "data" : data,
         })
 
-    def parse_values(self, v, **kwargs):
-        """Parse all tags in the string v (case insensitive). These are the tags enclosed in curly braces (eg. "value_covn1_0")
+    # def parse_values(self, v, **kwargs):
+    #     """Parse all tags in the string v (case insensitive). These are the tags enclosed in curly braces (eg. "value_covn1_0")
 
-        If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
+    #     If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
 
-        Tags also have an alternate alt_text, which is specified by separating the tag name with |. If the
-        tag name is not found in kwargs, instead of keeping it unchanged we instead replace it with the alt_text.
-        For example, "{myTag|<MISSING>}" would be replaced with the string "<MISSING>" if the tag myTag has no key in
-        kwargs.
+    #     Tags also have an alternate alt_text, which is specified by separating the tag name with |. If the
+    #     tag name is not found in kwargs, instead of keeping it unchanged we instead replace it with the alt_text.
+    #     For example, "{myTag|<MISSING>}" would be replaced with the string "<MISSING>" if the tag myTag has no key in
+    #     kwargs.
 
-        Parameters
-        ----------
-        v : str | any
-            The string to parse. If it is not a string then it is returned unchanged.
-        kwargs : dict
-            Dictionary of values for all the recognized tags. The keys are the tags (without curly braces). The values
-            are either the literal value or a dictionary. If a dictionary, it contains "value" which is the value,
-            "data" which is the pd.DataFrame data in WWMeasure associated with the value, and "re_match" which is a compiled
-            regular expression that finds the tag. See populate_format_args and add_array_values.
+    #     Parameters
+    #     ----------
+    #     v : str | any
+    #         The string to parse. If it is not a string then it is returned unchanged.
+    #     kwargs : dict
+    #         Dictionary of values for all the recognized tags. The keys are the tags (without curly braces). The values
+    #         are either the literal value or a dictionary. If a dictionary, it contains "value" which is the value,
+    #         "data" which is the pd.DataFrame data in WWMeasure associated with the value, and "re_match" which is a compiled
+    #         regular expression that finds the tag. See populate_format_args and add_array_values.
 
-        Returns
-        -------
-        v : str | any
-            The string v, with all tags matched and replaced. If the input v is not a string then it is returned unchanged.
-        matching_data : list
-            All the "data" members in kwargs that were associated with tags found in v that were parsed. See kwargs.
-        """
-        if not isinstance(v, str):
-            return v, []
+    #     Returns
+    #     -------
+    #     v : str | any
+    #         The string v, with all tags matched and replaced. If the input v is not a string then it is returned unchanged.
+    #     matching_data : list
+    #         All the "data" members in kwargs that were associated with tags found in v that were parsed. See kwargs.
+    #     """
+    #     if not isinstance(v, str):
+    #         return v, []
 
-        if INDEX_KEY in kwargs:
-            v = v.replace(REPLICATE_NUM, kwargs[INDEX_KEY])
+    #     if INDEX_KEY in kwargs:
+    #         v = v.replace(REPLICATE_NUM, kwargs[INDEX_KEY])
 
-        # Parse all tags in curly braces, the tag names are the keys in kwargs. They can have formatting 
-        # options (passed to str.format). We scan the string v in reverse order, parsing the latest tags first. 
-        # This allows for embedded tags. If a tag doesn't exist in kwargs, then we keep it in the string (with curly braces)
-        # since we might want to parse those some other time in the future.
-        closing_brackets = []
+    #     # Parse all tags in curly braces, the tag names are the keys in kwargs. They can have formatting 
+    #     # options (passed to str.format). We scan the string v in reverse order, parsing the latest tags first. 
+    #     # This allows for embedded tags. If a tag doesn't exist in kwargs, then we keep it in the string (with curly braces)
+    #     # since we might want to parse those some other time in the future.
+    #     closing_brackets = []
 
-        format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
-        data_args = { k.lower() : v for k, v in kwargs.items() if isinstance(v, (dict, EasyDict))}
-        matching_data = []
+    #     format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
+    #     data_args = { k.lower() : v for k, v in kwargs.items() if isinstance(v, (dict, EasyDict))}
+    #     matching_data = []
 
-        for idx in range(len(v))[::-1]:
-            if v[idx] == "}":
-                closing_brackets.append(idx)
-            if v[idx] == "{":
-                if len(closing_brackets) == 0:
-                    raise ValueError("ERROR: Missing bracket '}'")
-                matching_close = closing_brackets.pop()
-                sub_str = v[idx:matching_close+1]
+    #     for idx in range(len(v))[::-1]:
+    #         if v[idx] == "}":
+    #             closing_brackets.append(idx)
+    #         if v[idx] == "{":
+    #             if len(closing_brackets) == 0:
+    #                 raise ValueError("ERROR: Missing bracket '}'")
+    #             matching_close = closing_brackets.pop()
+    #             sub_str = v[idx:matching_close+1]
 
-                replace = sub_str
-                try:
-                    # See if any tags that have associated data are present. We add the associated data to the matching_data
-                    # list.
-                    for data_key, data_vals in data_args.items():
-                        regex = data_vals.get("re_match", None)
-                        if regex is None:
-                            regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
-                        if re.match(regex, sub_str):
-                            matching_data.extend(data_vals["data"])
+    #             replace = sub_str
+    #             try:
+    #                 # See if any tags that have associated data are present. We add the associated data to the matching_data
+    #                 # list.
+    #                 for data_key, data_vals in data_args.items():
+    #                     regex = data_vals.get("re_match", None)
+    #                     if regex is None:
+    #                         regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
+    #                     if re.match(regex, sub_str):
+    #                         matching_data.extend(data_vals["data"])
 
-                    # sub_str is the substring of v starting at our current index idx up to the end of the string.
-                    match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
-                    if match is not None:
-                        # We found a string in curly braces!
-                        # The format is {key:fmt|alt_text}, where {key:fmt} is passed to the string's
-                        # format call, and alt_text is used if the key does not exist in format_args.
-                        # If alt_text is not specified and if the key is not found in format_args then
-                        # we keep the tag in the string unmodified.
-                        key = match[1].lower()
-                        fmt = match[2]
-                        alt_text = match[3]
-                        has_alt_text = len(alt_text) > 0
-                        sub_str = "{%s%s}" % (key, fmt)
-                        if key in format_args.keys():
-                            replace = sub_str.format(**format_args)
-                        elif has_alt_text:
-                            replace = alt_text[1:]
-                except Exception as e:
-                    print("EXCEPTION:", e)
-                    pass
+    #                 # sub_str is the substring of v starting at our current index idx up to the end of the string.
+    #                 match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
+    #                 if match is not None:
+    #                     # We found a string in curly braces!
+    #                     # The format is {key:fmt|alt_text}, where {key:fmt} is passed to the string's
+    #                     # format call, and alt_text is used if the key does not exist in format_args.
+    #                     # If alt_text is not specified and if the key is not found in format_args then
+    #                     # we keep the tag in the string unmodified.
+    #                     key = match[1].lower()
+    #                     fmt = match[2]
+    #                     alt_text = match[3]
+    #                     has_alt_text = len(alt_text) > 0
+    #                     sub_str = "{%s%s}" % (key, fmt)
+    #                     if key in format_args.keys():
+    #                         replace = sub_str.format(**format_args)
+    #                     elif has_alt_text:
+    #                         replace = alt_text[1:]
+    #             except Exception as e:
+    #                 print("EXCEPTION:", e)
+    #                 pass
 
-                v = "{}{}{}".format(v[:idx], replace, v[matching_close+1:])
+    #             v = "{}{}{}".format(v[:idx], replace, v[matching_close+1:])
 
-        if len(closing_brackets) > 0:
-            raise ValueError("ERROR: Unmatched '{'")
+    #     if len(closing_brackets) > 0:
+    #         raise ValueError("ERROR: Unmatched '{'")
 
-        return v, matching_data
+    #     return v, matching_data
 
     def copy_to_position(self, source_ws, source_row, target_sheet_name, data, other_data=None, target_row=None, target_col=None, row_name=None, index=None):
         """Copy the specified row from the template source_ws to the end of the target sheet.
@@ -1778,9 +1775,9 @@ class QPCRPopulator(object):
 
     def make_file_splits(self, df):
         """Split the DataFrame into groups, where each group will be analyzed separately and output to a different file.
-        The split depends on the split_by_site value passed to the constructor. If split_by_site is True then
-        we split the groups based on the parent ID of the site. If it is false then there is a single split where
-        all data are in a single file.
+        The split depends on the output file name that is formed from target_file passed to the constructor. target_file
+        optionally has tags that depend on the site ID of each sample ({site_id}, {site_title}, {parent_site_id}, {parent_site_title},
+        and {sample_type}). Sites with the same output file (including the path) will be grouped together in the same file.
 
         Parameters
         ----------
@@ -1795,22 +1792,19 @@ class QPCRPopulator(object):
             element of the tuple is the DataFrame of the split. Note that there can be overlap between each group,
             since all required standard curves and additional data are included in each group.
         """
-        if self.split_by_site:
-            def _clean_site_id(site_id):
-                site_id = str(site_id).replace(f"{self.config.input.lab_id}{self.config.input.lab_id_separator}", "")
-                site_id = re.sub("[^A-Za-z0-9_\.-]", "", site_id)
-                return site_id
+        def _clean_site_id(site_id):
+            site_id = str(site_id).replace(f"{self.config.input.lab_id}{self.config.input.lab_id_separator}", "")
+            site_id = re.sub("[^A-Za-z0-9_\.-]", "", site_id)
+            return site_id
 
-            # Splits all Unknowns by siteID. For each group, all other measures (ie. non-Unknowns) are included
-            site_id_col = f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"
-            unknowns_filt = (df["unit"] == "Ct")
-            cleaned_site_id_col = "___cleaned_site_id___"
-            df[cleaned_site_id_col] = df[site_id_col].map(_clean_site_id)                        
-            groups = self.sites.group_by_parentid(df, cleaned_site_id_col, intersection_filter=unknowns_filt, always_include_filter=~unknowns_filt)
-            del df[cleaned_site_id_col]
-            return groups
-        else:
-            return [({"parentSiteID" : "All", "parentSiteTitle" : "All"}, df)]
+        # Splits all Unknowns by siteID. For each group, all other measures (ie. non-Unknowns) are included
+        site_id_col = f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"
+        unknowns_filt = (df["unit"] == "Ct")
+        cleaned_site_id_col = "___cleaned_site_id___"
+        df[cleaned_site_id_col] = df[site_id_col].map(_clean_site_id)
+        groups = self.sites.group_by_file_template(df, cleaned_site_id_col, self.target_file, intersection_filter=unknowns_filt, always_include_filter=~unknowns_filt)
+        del df[cleaned_site_id_col]
+        return groups
 
     def make_inner_splits(self, df):
         """For each file group (from make_file_splits), split the DataFrame into additional groups by analysis date.
@@ -1832,7 +1826,10 @@ class QPCRPopulator(object):
         groups = []
         for analysis_date in analysis_dates:
             # Include all items for the current analysis_date
-            cur_filt = df[self.config.input.analysis_date_col] == analysis_date
+            if pd.isna(analysis_date):
+                cur_filt = df[self.config.input.analysis_date_col].isna()
+            else:
+                cur_filt = df[self.config.input.analysis_date_col] == analysis_date
             # Include all needed standard curve data (Ct_Std and SQ)
             standard_curve_ids = df[cur_filt][self.config.input.standard_curve_id_col].unique()
             std_filt = df[self.config.input.standard_curve_id_col].isin(standard_curve_ids) & df[self.config.input.unit_other_col].isin(["Ct_Std", "SQ"])
@@ -2094,13 +2091,9 @@ class QPCRPopulator(object):
             for col in remove_time_cols:
                 self.measure_sheet_df[col] = pd.to_datetime(self.measure_sheet_df[col]).dt.date
 
-        # Go through each output file for our data. We use separate files if split_by_site is True, otherwise we
-        # use a single output file.
+        # Go through each output file for our data. 
         for file_info, file_group_df in self.make_file_splits(self.measure_sheet_df):
-            # Get our current parent site ID and title, which we use to form the output file name.
-            parent_site_id = file_info["parentSiteID"]
-            site_parent_title = file_info["parentSiteTitle"]
-            target_file = self.target_file.format(site_id=parent_site_id, site_parent_title=site_parent_title)
+            target_file = file_info["fileName"]
             local_target_file = cloud_utils.download_file(target_file)
             target_dir = os.path.dirname(local_target_file) if local_target_file else ""
             if target_dir and not os.path.exists(target_dir):
@@ -2219,17 +2212,17 @@ if __name__ == "__main__":
             # "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
 
             # Ottawa Long
-            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-aug9.xlsx",
+            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-errb.xlsx",
             # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
             "template_file" : "qpcr_template_ottawa.xlsx",
             "config" : ["qpcr_populator_ottawa.yaml"],
             "qaqc" : ["qaqc_ottawa.yaml"],
 
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/{site_parent_title}/populated - {site_parent_title} - Test.xlsx",
-            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/out-aug9.xlsx",
+            # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/{parent_site_title}/out-aug9 - {parent_site_title} - {site_id}.xlsx",
+            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/Error output - b.xlsx",
             "hide_qaqc" : False,
             "overwrite" : True,
-            "split_by_site" : False,
 
             "sites_config" : "sites.yaml",
             "sites_file" : "sites.xlsx",
@@ -2242,7 +2235,6 @@ if __name__ == "__main__":
         args.add_argument("--target_file", type=str, help="Target Excel file to save the final, formatted output to.", required=True)
         args.add_argument("--config", nargs="+", type=str, help="Configuration file", default="qpcr_populator_ottawa.yaml")
         args.add_argument("--overwrite", help="If set then overwrite the target_file (instead of appending to it).", action="store_true")
-        args.add_argument("--split_by_site", help="If set then split the output by site, with one XLSX file per site.", action="store_true")
         args.add_argument("--hide_qaqc", help="If set then do not show QAQC highlighting or sheets. Outliers will still be removed and marked with square brackets.", action="store_true")
         args.add_argument("--sites_file", type=str, help="Excel file specifying all WW sites with information about each site.", required=False)
         args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
@@ -2251,7 +2243,17 @@ if __name__ == "__main__":
 
     tic = datetime.now()
     print("Starting populator at:", tic)
-    qpcr = QPCRPopulator(opts.input_file, opts.template_file, opts.target_file, opts.overwrite, opts.config, opts.qaqc, sites_config=opts.sites_config, sites_file=opts.sites_file, split_by_site=opts.split_by_site, hide_qaqc=opts.hide_qaqc)
+    qpcr = QPCRPopulator(
+        opts.input_file, 
+        opts.template_file, 
+        opts.target_file, 
+        opts.overwrite, 
+        opts.config, 
+        opts.qaqc, 
+        sites_config=opts.sites_config, 
+        sites_file=opts.sites_file, 
+        hide_qaqc=opts.hide_qaqc
+        )
     qpcr.populate()
     toc = datetime.now()
     print("Started at:", tic)

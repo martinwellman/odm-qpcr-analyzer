@@ -35,6 +35,10 @@ MAIN_COL_BL_CT = "main_col_bl_ct"
 MAIN_COL_CT_AVG = "main_col_ct_avg"
 MAIN_COL_CT = "main_col_ct"
 
+# Regex for searching for tags, eg {value_0|MISSING}. MISSING is alternate text to include if the tag is not available.
+PARSE_VALUES_REGEX = "\{(%s)(:?[^\s|]*)(\|?[^\}]*)\}"
+PARSE_VALUES_REGEX_ANYKEY = re.compile(PARSE_VALUES_REGEX % "[0-9A-Za-z_\.]*", flags=re.IGNORECASE)
+
 class QPCRError(Exception):
     pass
 
@@ -242,3 +246,98 @@ def sheet_to_df(sheet):
     df = pd.DataFrame(data, columns=columns)
     return df
 
+def parse_values(v, **kwargs):
+    """Parse all tags in the string v (case insensitive). These are the tags enclosed in curly braces (eg. "value_covn1_0")
+
+    If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
+
+    Tags also have an alternate alt_text, which is specified by separating the tag name with |. If the
+    tag name is not found in kwargs, instead of keeping it unchanged we instead replace it with the alt_text.
+    For example, "{myTag|<MISSING>}" would be replaced with the string "<MISSING>" if the tag myTag has no key in
+    kwargs.
+
+    Parameters
+    ----------
+    v : str | any
+        The string to parse. If it is not a string then it is returned unchanged.
+    kwargs : dict
+        Dictionary of values for all the recognized tags. The keys are the tags (without curly braces). The values
+        are either the literal value or a dictionary. If a dictionary, it contains "value" which is the value,
+        "data" which is the pd.DataFrame data in WWMeasure associated with the value, and "re_match" which is a compiled
+        regular expression that finds the tag. See populate_format_args and add_array_values.
+
+    Returns
+    -------
+    v : str | any
+        The string v, with all tags matched and replaced. If the input v is not a string then it is returned unchanged.
+    matching_data : list
+        All the "data" members in kwargs that were associated with tags found in v that were parsed. See kwargs.
+    """
+    if not isinstance(v, str):
+        return v, []
+
+    if INDEX_KEY in kwargs:
+        v = v.replace(REPLICATE_NUM, kwargs[INDEX_KEY])
+
+    # Parse all tags in curly braces, the tag names are the keys in kwargs. They can have formatting 
+    # options (passed to str.format). We scan the string v in reverse order, parsing the latest tags first since
+    # it's easier for embedded tags. If a tag doesn't exist in kwargs, then we keep it in the string (with curly
+    # braces) since we might want to parse those some other time in the future.
+    closing_brackets = []
+
+    format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
+    data_args = { k.lower() : v for k, v in kwargs.items() if isinstance(v, (dict, EasyDict))}
+    matching_data = []
+
+    for idx in range(len(v))[::-1]:
+        if v[idx] == "}":
+            closing_brackets.append(idx)
+        if v[idx] == "{":
+            if len(closing_brackets) == 0:
+                raise ValueError("ERROR: Missing bracket '}'")
+            matching_close = closing_brackets.pop()
+            sub_str = v[idx:matching_close+1]
+
+            replace = sub_str
+            try:
+                # See if any tags that have associated data are present. We add the associated data to the matching_data
+                # list.
+                for data_key, data_vals in data_args.items():
+                    regex = data_vals.get("re_match", None)
+                    if regex is None:
+                        regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
+                    if re.match(regex, sub_str):
+                        matching_data.extend(data_vals["data"])
+
+                # sub_str is the substring of v starting at our current index idx up to the end of the string.
+                match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
+                if match is not None:
+                    # We found a string in curly braces!
+                    # The format is {key:fmt|alt_text}, where {key:fmt} is passed to the string's
+                    # format call, and alt_text is used if the key does not exist in format_args.
+                    # If alt_text is not specified and if the key is not found in format_args then
+                    # we keep the tag in the string unmodified.
+                    key = match[1].lower()
+                    fmt = match[2]
+                    alt_text = match[3]
+                    has_alt_text = len(alt_text) > 0
+                    sub_str = "{%s%s}" % (key, fmt)
+                    if key in format_args.keys():
+                        replace = sub_str.format(**format_args)
+                    elif has_alt_text:
+                        replace = alt_text[1:]
+            except Exception as e:
+                print("EXCEPTION:", e)
+                pass
+
+            v = "{}{}{}".format(v[:idx], replace, v[matching_close+1:])
+
+    if len(closing_brackets) > 0:
+        raise ValueError("ERROR: Unmatched '{'")
+
+    return v, matching_data
+
+def cleanup_file_name(file_name):
+    # file_name = re.sub(r"[:=+\*\\/&]", "-", file_name)
+    file_name = re.sub(r"[^A-Za-z0-9\.\-\(\)\[\] {}\<\>_]", "-", file_name)
+    return file_name

@@ -85,6 +85,10 @@ print(f"The ODM output file can be found at: {mapper_output_file}")
 # 3. Run the QPCRPopulator to generate the full report with QA/QC.
 # The final report is saved at populated/populated-sample.xlsx
 # The return value populator_output_files contains the final report path
+# Grouping into separate files is based on populator_output_file. Try
+# adding any of the tags {site_id}, {site_title}, {parent_site_id},
+# {parent_site_title}, and {sample_type} to populator_output_file. These
+# tags are defined in sites.xlsx
 print("="*40)
 print("Running QPCRPopulator")
 
@@ -101,7 +105,6 @@ qpcr = QPCRPopulator(input_file=mapper_output_file,
     qaqc_config_file=populator_qaqc_config,
     sites_config=sites_config,
     sites_file=sites_file,
-    split_by_site=False,
     hide_qaqc=False)
 populator_output_files = qpcr.populate()
 print("Finished running QPCRPopulator!")

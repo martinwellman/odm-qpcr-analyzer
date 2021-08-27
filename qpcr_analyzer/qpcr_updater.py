@@ -25,9 +25,11 @@ input file.
         populator_config, 
         sites_config=sites_config, 
         sites_file=sites_file)
-    # updated is a list of bools. If True at index n, then input_files[n] has been appended to the target_file[n].
-    # If False at index n, then input_files[n] was not appended to target_file[n], due to not being in the correct format.
-    updated = updater.update(input_files, target_dir, target_file)
+    # updated is a list of bools. If True at index n, then input_files[n] has been appended to the target_path_template.
+    # If False at index n, then input_files[n] was not appended to target_path_template, due to not being in the correct format.
+    # target_path_template can contain tags specific to the site ID: {site_id}, {site_title}, {parent_site_id}, {parent_site_title},
+    # and {sample_type}
+    updated = updater.update(input_files, target_path_template)
 """
 
 import os
@@ -54,7 +56,7 @@ class QPCRUpdater(object):
     def __init__(self, config_file, populator_config_file, sites_config, sites_file):
         super().__init__()
         self.local_dir = tempfile.gettempdir()
-        self.target_workbooks = []
+        self.target_workbooks = {}
 
         self.config = load_config(config_file)
         self.populator_config = load_config(populator_config_file)
@@ -71,12 +73,14 @@ class QPCRUpdater(object):
 
     def get_workbook_info(self, site_id):
         """Get the info of the workbook (ie. Excel file) for the specified site_id. The info is a dictionary with multiple
-        values associated with the workbook, including the site_ids for the workbook, the site_parent_title, the
-        remote_target (target file to add to), the local_target (local file to add to), and the actual "wb" (workbook).
+        values associated with the workbook, including the remote_target (target file to add to), the local_target (local 
+        file to add to), and the actual "wb" (workbook).
         """
-        site_id = site_id.strip().lower()
-        matches = [w for w in self.target_workbooks if site_id in w["site_ids"]]
-        return matches[0] if len(matches) > 0 else None
+        remote_target = self.get_remote_target_file(site_id)
+        return self.target_workbooks.get(remote_target, None)
+
+    def get_remote_target_file(self, site_id):
+        return self.sites.parse_filename_for_siteid(self.target_path_template, site_id)
 
     def get_target_workbook(self, site_id):
         """Get the target OpenPYXL workbook that we copy to for the specified site_id.
@@ -87,36 +91,22 @@ class QPCRUpdater(object):
             return site_info["wb"]
         else:
             print(f"Downloading site workbook for {site_id}")
-
-            # Get the workbook for the site
-            site_parent_title = self.sites.get_site_parent_title(site_id)
-            if not site_parent_title:
-                site_parent_title = self.sites.get_unknown_siteid()
-                site_ids = [site_parent_title]
-            else:
-                site_ids = self.sites.get_siteids_with_shared_parentid(site_id)
-            # site_info = [g for g in self.populator_config.output.site_groupings if site_id in g.site_ids]
-            # site_info = site_info[0] if len(site_info) > 0 else None
-            # site_title = site_info.site_title if site_info is not None else self.populator_config.input.unknown_site
-            # site_ids = site_info.site_ids if site_info is not None else [self.populator_config.input.unknown_site]
-            remote_target = os.path.join(self.target_dir.format(site_parent_title=site_parent_title, site_id=site_id), self.target_file.format(site_parent_title=site_parent_title, site_id=site_id))
-
-            local_target = cloud_utils.download_file(remote_target, target_dir=self.local_dir)
+            remote_target = self.get_remote_target_file(site_id)
+            local_target = cloud_utils.download_file(remote_target)
 
             if local_target and os.path.isfile(local_target):
+                # File was downloaded so load it
                 fix_xlsx_file(local_target)
                 wb = openpyxl.load_workbook(local_target)
             else:
+                # File was not downloaded so create a new workbook
                 local_target = os.path.join(self.local_dir, cloud_utils.remove_prefix(remote_target))
                 wb = openpyxl.Workbook()
 
-            self.target_workbooks.append({
-                "site_ids" : site_ids,
-                "site_parent_title" : site_parent_title,
-                "remote_target" : remote_target,
+            self.target_workbooks[remote_target] = {
                 "local_target" : local_target,
                 "wb" : wb,
-            })
+            }
 
             return wb
             
@@ -145,20 +135,18 @@ class QPCRUpdater(object):
             target_cell.alignment = copy(source_cell.alignment)
         return target_cell
 
-    def update(self, input_files, target_dir, target_file):
+    def update(self, input_files, target_path_template):
         """Do a full update by copying valid input_files to the target files.
 
         Parameters
         ----------
         input_files : list[str]
             List of local Excel files that we want to copy to the target files.
-        target_dir : str
-            A target directory (with possible tags) that the target files are stored in. This can be a local
-            or remote directory. For Google Drive paths include the prefix gd://. Tags that can be used are
-            {site_parent_title} and {site_id} (eg. "gd://{site_parent_title}/{site_id}.xlsx")
-        target_file : str
-            The target file name, in the target_dir, to copy to. Like target_dir this can include the tags
-            {site_parent_title} and {site_id}.
+        target_path_template : str
+            The target file name, including the path. Can be a remote target (ie. preceded with gd:// for
+            file on Google Drive or s3:// for file on AWS S3) or a local file. Tags that can be used are
+            {site_id}, {site_title}, {parent_site_id}, {parent_site_title}, and {sample_type}. The site ID is determined
+            by extracting it from the input file under the config.site_column column.
 
         Returns
         -------
@@ -167,8 +155,7 @@ class QPCRUpdater(object):
             then all the required_source_headers columns in the input file were present. If it was not copied
             it was because those columns were not available in the input file.
         """
-        self.target_file = target_file
-        self.target_dir = target_dir
+        self.target_path_template = target_path_template
         success = []
 
         for input_file in input_files:
@@ -228,7 +215,8 @@ class QPCRUpdater(object):
         return success
 
     def save_and_upload(self):
-        """Save all our target output files to disk, and upload them to the remote target.
+        """Save all our target output files to disk, and upload them to the remote target if the
+        target_path_template sent to update is a remote path.
 
         Returns
         -------
@@ -237,16 +225,17 @@ class QPCRUpdater(object):
             s3:// or gd://) or local paths, depending on the target_dir passed in the previous call to update.
         """
         remote_targets = []
-        for wb_info in self.target_workbooks:
+        # for wb_info in self.target_workbooks:
+        for remote_target, wb_info in self.target_workbooks.items():
             local_target = wb_info["local_target"]
             local_dir = os.path.dirname(local_target)
             if local_dir:
                 os.makedirs(local_dir, exist_ok=True)
             add_excel_calculated_values(wb_info["wb"])
             wb_info["wb"].save(local_target)
-            print("Uploading to", wb_info["remote_target"])
-            cloud_utils.upload_file(local_target, wb_info["remote_target"])
-            remote_targets.append(wb_info["remote_target"])
+            print(f"Uploading to {remote_target}")
+            cloud_utils.upload_file(local_target, remote_target)
+            remote_targets.append(remote_target)
         return remote_targets
 
 if __name__ == "__main__":
@@ -258,7 +247,7 @@ if __name__ == "__main__":
                 "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
             ],
             "target_dir" : "gd://{site_parent_title}/",
-            "target_file" : "Data - {site_parent_title}.xlsx",
+            "target_path_template" : "Data - {site_parent_title}.xlsx",
             "config" : "qpcr_updater.yaml",
             "populator_config" : "qpcr_populator_ottawa.yaml",
             "sites_config" : "sites.yaml",
@@ -269,7 +258,7 @@ if __name__ == "__main__":
         args.add_argument("--config", nargs="+", type="str", help="Config file to use", required=True)
         args.add_argument("--populator_config", nargs="+", type="str", help="QPCRPopulator config file(s) used when the input_files were generated.", required=True)
         args.add_argument("--target_dir", type="str", help="Target folder (possibly remote) where the already populated outputs are. (We append to these)", required=True)
-        args.add_argument("--target_file", type="str", help="Name template for the output files.", required=True)
+        args.add_argument("--target_path_template", type="str", help="Name template for the output files. Can contain tags {site_id}, {site_title}, {parent_site_id}, {parent_site_title}, and {sample_type}", required=True)
         args.add_argument("--input_files", nargs="+", type="str", help="Input files containing the data", required=True)
         args.add_argument("--sites_file", type=str, help="Excel file specifying all WW sites with information about each site.", required=False)
         args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
@@ -277,7 +266,7 @@ if __name__ == "__main__":
     
     tic = datetime.now()
     updater = QPCRUpdater(opts.config, opts.populator_config, sites_config=opts.sites_config, sites_file=opts.sites_file)
-    print("Update:", updater.update(opts.input_files, opts.target_dir, opts.target_file))
+    print("Update:", updater.update(opts.input_files, opts.target_path_template))
     print("Upload:", updater.save_and_upload())
     toc = datetime.now()
     print("Total duration:", toc - tic)

@@ -48,7 +48,11 @@ from qpcr_populator import QPCRPopulator
 from qpcr_extracter import QPCRExtracter
 from qpcr_updater import QPCRUpdater
 from wbe_odm.odm_mappers.biorad_mapper import BioRadMapper
-from qpcr_utils import QPCRError
+from qpcr_utils import (
+    QPCRError,
+    cleanup_file_name,
+    parse_values,
+    )
 
 SEND_EMAIL_ON_ERROR = True
 DISABLE_ALL_EMAILS = False
@@ -56,6 +60,9 @@ TEMP_DIR = None            # Set to None (preferred) to get a new tempdir with t
 OVERRIDE_RUNID = None      # Set to None (preferred) to create a new unique run ID
 DELETE_TEMP_DIR = True     # Set to True (preferred) to delete the temp dir once done
 UPLOAD_RESULTS = False
+
+# @TODO: Implement this
+DELETE_INPUTS = True       # Set to True to delete the S3 inputs directory
 
 ADMIN_EMAIL = "mwellman@ohri.ca"
 DEFAULT_FROM_EMAIL = "ODM QPCR Analyzer <odm@cryotoad.com>"
@@ -83,12 +90,6 @@ DEFAULT_CREDENTIALS_FILE = "credentials.json"
 
 ERROR_SUBJECT = "Error from ODM QPCR Analyzer"
 EMAIL_SUBJECT = "QPCR Reports"
-
-def cleanup_file_name(file_name):
-    # file_name = re.sub("[^\w\s-]", "_", file_name)
-    # file_name = re.sub("[-\s]+", "-", file_name)
-    file_name = re.sub(r"[^A-Za-z0-9\.\-\(\)\[\] ]", "_", file_name)
-    return file_name
 
 RUNDATETIME = None 
 RUNID = None 
@@ -273,11 +274,11 @@ def format_file_name(file, clean_name=True, **kwargs):
         All the tags and values for passing to str.format. In addition to these we add the tags date=RUNDATETIME(year-month-day),
         time=RUNDATETIME(time), datetime=RUNDATETIME(year and time).
     """
-    name = file.format(
+    name = parse_values(file,
         date=RUNDATETIME.strftime("%Y-%m-%d"),
         time=RUNDATETIME.strftime("%H:%M:%S"),
         datetime=RUNDATETIME.strftime("%Y-%m-%d-%H:%M:%S"),
-        **kwargs)
+        **kwargs)[0]
     file_name = os.path.splitext(name)[0]
     name = "{}{}".format(cleanup_file_name(file_name) if clean_name else file_name, os.path.splitext(name)[1])
     return name
@@ -398,7 +399,6 @@ def handler(event, context):
             settings.append("Memory: {}".format(os.environ["AWS_LAMBDA_FUNCTION_MEMORY_SIZE"]))
         settings.append("Executed on: {}".format(RUNDATETIME.strftime("%Y-%m-%d %H:%M:%S")))
 
-        split_by_site = cast_to_bool(event.get("split_by_site", False))
         input_files = event.get("inputs", None)
         populated_output_file = event.get("populated_output_file", DEFAULT_POPULATED_OUTPUT_FILE)
         output_path = event.get("output_path", DEFAULT_OUTPUT_PATH)
@@ -488,7 +488,7 @@ def handler(event, context):
                 populator_config, 
                 sites_config=sites_config, 
                 sites_file=sites_file)
-            updated = updater.update(local_input_files, remote_target, populated_output_file)
+            updated = updater.update(local_input_files, os.path.join(remote_target, populated_output_file))
             local_updated_input_files = [f for f,updated in zip(local_input_files, updated) if updated]
             local_input_files = [f for f,updated in zip(local_input_files, updated) if not updated]
 
@@ -523,9 +523,12 @@ def handler(event, context):
         # Run populator
         populated_files = []
         for num, mapped_file in enumerate(mapped_files):
-            # output_file = os.path.join(remote_target or temp_root, populated_output_file)
-            output_file = os.path.join(temp_root, populated_output_file)
-            output_file = format_file_name(output_file, num=num, site_id="{site_id}", site_parent_title="{site_parent_title}", site_title="{site_title}", clean_name=False)
+            # We add remote_target to the output path because grouping of sites depends on what
+            # the output file name and path are. Sites with the same output file are grouped together. remote_target might
+            # have tags (eg. {site_id}, {parent_site_title}, etc) that affect the filename and hence the grouop.
+            output_file = os.path.join(temp_root, cloud_utils.remove_prefix(remote_target), populated_output_file)
+
+            output_file = format_file_name(output_file, num=num, clean_name=False)
             qpcr = QPCRPopulator(input_file=mapped_file,
                 template_file=populator_template, 
                 target_file=output_file, 
@@ -534,7 +537,6 @@ def handler(event, context):
                 qaqc_config_file=qaqc_config,
                 sites_config=sites_config,
                 sites_file=sites_file,
-                split_by_site=split_by_site,
                 hide_qaqc=hide_qaqc)
             output_files = qpcr.populate()
             populated_files.extend(output_files)
@@ -542,7 +544,7 @@ def handler(event, context):
         # Update remote target files on Google Drive with the new output from the populator
         updated_file_urls = []
         if updater is not None:
-            updated = updater.update(populated_files, remote_target, populated_output_file)
+            updated = updater.update(populated_files, os.path.join(remote_target, populated_output_file))
             updated_targets = updater.save_and_upload()
             for updated_target in updated_targets:
                 file_id = gdrive_utils.drive_get_file_id(cloud_utils.remove_prefix(updated_target))
@@ -650,3 +652,4 @@ if __name__ == "__main__" and "get_ipython" in globals():
     with open("../../../../event.json", "r") as f:
         data = EasyDict(yaml.safe_load(f))
     handler(data, None)
+

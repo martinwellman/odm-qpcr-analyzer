@@ -12,7 +12,6 @@ The QPCRPopulator class receives ODM data and creates an output report, along wi
         qaqc_config_file=qaqc_config,               # eg. qaqc_ottawa.yaml
         sites_config=sites_config,                  # eg. sites.yaml
         sites_file=sites_file,                      # eg. sites.xlsx
-        split_by_site=False,
         hide_qaqc=False)
     output_files = qpcr.populate()
 

@@ -34,6 +34,9 @@ def is_http(file):
 def is_https(file):
     return get_prefix(file).lower() == HTTPS_PREFIX.lower()
 
+def is_local(file):
+    return not get_prefix(file)
+
 def bucket_and_key(file):
     comps = file[len(S3_PREFIX):].split("/")
     bucket = comps[0]
@@ -41,6 +44,8 @@ def bucket_and_key(file):
     return bucket, key
 
 def remove_prefix(file):
+    if not file:
+        return ""
     return re.sub("^[A-Za-z]*://", "", file)
 
 def get_prefix(file):
@@ -215,6 +220,15 @@ def upload_file(file_name, upload_path):
         except Exception as e:
             print(f"Exception uploading to Google Drive: {file_name}: {e}")
             return False
+    elif get_prefix(upload_path):
+        raise ValueError(f"Upload path has unrecognized prefix: {upload_path}")
     else:
-        raise ValueError(f"Upload path is not an S3 or Google Drive path: {upload_path}")
+        try:
+            if os.path.dirname(upload_path):
+                os.makedirs(os.path.dirname(upload_path), exist_ok=True)
+            shutil.copy(file_name, upload_path)
+            return True
+        except:
+            print(f"Exception uploading {file_name} to local destination {upload_path}: {e}")
+            return False
 
