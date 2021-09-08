@@ -51,7 +51,6 @@ from qpcr_utils import (
     SINGLE_CAL_SHEET,
     CAL_SHEET_FMT,
     INDEX_KEY,
-    REPLICATE_NUM,
     MAIN_ROW_DATA,
     CAL_ROW_DATA,
     PARSE_VALUES_REGEX,
@@ -774,97 +773,6 @@ class QPCRPopulator(object):
             "args" : deepcopy(args),
             "data" : data,
         })
-
-    # def parse_values(self, v, **kwargs):
-    #     """Parse all tags in the string v (case insensitive). These are the tags enclosed in curly braces (eg. "value_covn1_0")
-
-    #     If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
-
-    #     Tags also have an alternate alt_text, which is specified by separating the tag name with |. If the
-    #     tag name is not found in kwargs, instead of keeping it unchanged we instead replace it with the alt_text.
-    #     For example, "{myTag|<MISSING>}" would be replaced with the string "<MISSING>" if the tag myTag has no key in
-    #     kwargs.
-
-    #     Parameters
-    #     ----------
-    #     v : str | any
-    #         The string to parse. If it is not a string then it is returned unchanged.
-    #     kwargs : dict
-    #         Dictionary of values for all the recognized tags. The keys are the tags (without curly braces). The values
-    #         are either the literal value or a dictionary. If a dictionary, it contains "value" which is the value,
-    #         "data" which is the pd.DataFrame data in WWMeasure associated with the value, and "re_match" which is a compiled
-    #         regular expression that finds the tag. See populate_format_args and add_array_values.
-
-    #     Returns
-    #     -------
-    #     v : str | any
-    #         The string v, with all tags matched and replaced. If the input v is not a string then it is returned unchanged.
-    #     matching_data : list
-    #         All the "data" members in kwargs that were associated with tags found in v that were parsed. See kwargs.
-    #     """
-    #     if not isinstance(v, str):
-    #         return v, []
-
-    #     if INDEX_KEY in kwargs:
-    #         v = v.replace(REPLICATE_NUM, kwargs[INDEX_KEY])
-
-    #     # Parse all tags in curly braces, the tag names are the keys in kwargs. They can have formatting 
-    #     # options (passed to str.format). We scan the string v in reverse order, parsing the latest tags first. 
-    #     # This allows for embedded tags. If a tag doesn't exist in kwargs, then we keep it in the string (with curly braces)
-    #     # since we might want to parse those some other time in the future.
-    #     closing_brackets = []
-
-    #     format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
-    #     data_args = { k.lower() : v for k, v in kwargs.items() if isinstance(v, (dict, EasyDict))}
-    #     matching_data = []
-
-    #     for idx in range(len(v))[::-1]:
-    #         if v[idx] == "}":
-    #             closing_brackets.append(idx)
-    #         if v[idx] == "{":
-    #             if len(closing_brackets) == 0:
-    #                 raise ValueError("ERROR: Missing bracket '}'")
-    #             matching_close = closing_brackets.pop()
-    #             sub_str = v[idx:matching_close+1]
-
-    #             replace = sub_str
-    #             try:
-    #                 # See if any tags that have associated data are present. We add the associated data to the matching_data
-    #                 # list.
-    #                 for data_key, data_vals in data_args.items():
-    #                     regex = data_vals.get("re_match", None)
-    #                     if regex is None:
-    #                         regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
-    #                     if re.match(regex, sub_str):
-    #                         matching_data.extend(data_vals["data"])
-
-    #                 # sub_str is the substring of v starting at our current index idx up to the end of the string.
-    #                 match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
-    #                 if match is not None:
-    #                     # We found a string in curly braces!
-    #                     # The format is {key:fmt|alt_text}, where {key:fmt} is passed to the string's
-    #                     # format call, and alt_text is used if the key does not exist in format_args.
-    #                     # If alt_text is not specified and if the key is not found in format_args then
-    #                     # we keep the tag in the string unmodified.
-    #                     key = match[1].lower()
-    #                     fmt = match[2]
-    #                     alt_text = match[3]
-    #                     has_alt_text = len(alt_text) > 0
-    #                     sub_str = "{%s%s}" % (key, fmt)
-    #                     if key in format_args.keys():
-    #                         replace = sub_str.format(**format_args)
-    #                     elif has_alt_text:
-    #                         replace = alt_text[1:]
-    #             except Exception as e:
-    #                 print("EXCEPTION:", e)
-    #                 pass
-
-    #             v = "{}{}{}".format(v[:idx], replace, v[matching_close+1:])
-
-    #     if len(closing_brackets) > 0:
-    #         raise ValueError("ERROR: Unmatched '{'")
-
-    #     return v, matching_data
 
     def copy_to_position(self, source_ws, source_row, target_sheet_name, data, other_data=None, target_row=None, target_col=None, row_name=None, index=None):
         """Copy the specified row from the template source_ws to the end of the target sheet.
@@ -2091,7 +1999,10 @@ class QPCRPopulator(object):
             for col in remove_time_cols:
                 self.measure_sheet_df[col] = pd.to_datetime(self.measure_sheet_df[col]).dt.date
 
-        # Go through each output file for our data. 
+        # Go through each output file for our data. The output files are determined by the tags
+        # in the target_file passed to the constructor, which has different tags (eg. {site_id},
+        # {site_title}, etc.). We usually put everything in a single output file, or we have
+        # one output file per site.
         for file_info, file_group_df in self.make_file_splits(self.measure_sheet_df):
             target_file = file_info["fileName"]
             local_target_file = cloud_utils.download_file(target_file)

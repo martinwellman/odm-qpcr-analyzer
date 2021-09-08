@@ -17,6 +17,7 @@ from openpyxl.utils.cell import coordinate_from_string
 
 from qpcr_utils import (
     add_sheet_name_to_colrow_name,
+    strip_quotes,
 )
 
 # Regex to search for custom functions. %s should be the function name, eg __GETRANGE
@@ -45,6 +46,10 @@ CUSTOM_FUNCS = {
     "__QUOTIFY" : {
         "func" : "custom_func_quotify",
         "bind" : -20,
+    },
+    "__SELECT" : {
+        "func" : "custom_func_select",
+        "bind" : -21,
     },
     "__GETDATA" : {
         "func" : "custom_func_getdata",
@@ -330,10 +335,17 @@ def custom_func_setcell(populator, sheet_name, id, replace_value="", **kwargs):
 
     return replace_value
 
+def custom_func_select(populator, value_a, value_b, **kwargs):
+    """Select value_a if it is not blank, otherwise select value_b.
+    """
+    if value_a is None or value_a == "":
+        return value_b
+    return value_a
+
 def custom_func_quotify(populator, value, **kwargs):
     """Add quotes to the value.
     """
-    value = value or ""
+    value = value if value is None else str(value)
     value = value.replace('"', '""')
     return f'"{value}"'
 
