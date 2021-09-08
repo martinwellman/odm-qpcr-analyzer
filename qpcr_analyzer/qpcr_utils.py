@@ -256,10 +256,11 @@ def parse_values(v, **kwargs):
 
     If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
 
-    Tags also have an alternate alt_text, which is specified by separating the tag name with |. If the
-    tag name is not found in kwargs, instead of keeping it unchanged we instead replace it with the alt_text.
-    For example, "{myTag|<MISSING>}" would be replaced with the string "<MISSING>" if the tag myTag has no key in
-    kwargs.
+    Tags also have an alternate blank_text and missing_text, which is specified by separating the tag name with |. If the
+    tag value is blank then we replace the tag with blank_text instead (if specified). If the tag name is not
+    found in kwargs, instead of keeping it unchanged we instead replace it with the missing_text.
+    For example, "{myTag|<BLANK>|<MISSING>}" would be replaced with the string "<BLANK>" if the tag myTag has
+    a blank value (ie. ""), and "<MISSING>" if myTag does not exist.
 
     Parameters
     ----------
