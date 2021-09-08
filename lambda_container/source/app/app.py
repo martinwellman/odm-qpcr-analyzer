@@ -88,8 +88,8 @@ DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT = "email_template_error.txt"
 DEFAULT_OUTPUT_PATH = "s3://odm-qpcr-analyzer/outputs"
 DEFAULT_CREDENTIALS_FILE = "credentials.json"
 
-ERROR_SUBJECT = "Error from ODM QPCR Analyzer"
-EMAIL_SUBJECT = "QPCR Reports"
+ERROR_SUBJECT = "Error from ODM QPCR Analyzer ({username}, {output_format_description})"
+EMAIL_SUBJECT = "QPCR Reports ({username}, {output_format_description})"
 
 RUNDATETIME = None 
 RUNID = None 
@@ -97,6 +97,9 @@ INSTANCEID = cleanup_file_name("{}-{}".format(datetime.now().astimezone(pytz.tim
 # The number of times this instance has run. If AWS Lambda reuses a launched instance then we'll increment this. It is for information/debugging
 # purposes
 INSTANCERUNS = 0
+USERNAME = None
+OUTPUT_FORMAT = None
+OUTPUT_FORMAT_DESCRIPTION = None
 
 def make_zip_file(file_name, *files):
     """Make a zip file containing a list of files.
@@ -352,6 +355,11 @@ def make_email_messages(*messages):
 
     return htm, txt
 
+def format_subject(subject):
+    """Create an email subject line by formatting a string.
+    """
+    return subject.format(username=USERNAME, output_format=OUTPUT_FORMAT, output_format_description=OUTPUT_FORMAT_DESCRIPTION)
+
 def send_error_email(to_emails, email_template_html, email_template_text, messages=None, include_stack_trace=False, **kwargs):
     """Send an error email.
     """
@@ -361,7 +369,7 @@ def send_error_email(to_emails, email_template_html, email_template_text, messag
     stack_trace = traceback.format_exc().strip()
     
     email_html, email_text = parse_email_templates(email_template_html, email_template_text, messages=messages, stack_trace=stack_trace, **kwargs)
-    send_email(DEFAULT_FROM_EMAIL, to_emails, EMAIL_SUBJECT, email_html, email_text)
+    send_email(DEFAULT_FROM_EMAIL, to_emails, format_subject(ERROR_SUBJECT), email_html, email_text)
 
     # with open("error.txt", "w") as f:
     #     f.write(email_text)
@@ -372,7 +380,7 @@ def send_error_email(to_emails, email_template_html, email_template_text, messag
 def handler(event, context):
     """Main handler for the Lambda function.
     """
-    global RUNDATETIME, RUNID, INSTANCERUNS, TEMP_DIR, OVERRIDE_RUNID
+    global RUNDATETIME, RUNID, INSTANCERUNS, TEMP_DIR, OVERRIDE_RUNID, USERNAME, OUTPUT_FORMAT, OUTPUT_FORMAT_DESCRIPTION
     INSTANCERUNS += 1
     RUNDATETIME = datetime.now().astimezone(pytz.timezone("US/Eastern"))
     if OVERRIDE_RUNID is None:
@@ -386,6 +394,9 @@ def handler(event, context):
     settings = []
     to_emails = [ADMIN_EMAIL]
     from_email = DEFAULT_FROM_EMAIL
+    USERNAME = "<no user>"
+    OUTPUT_FORMAT = "<no format>"
+    OUTPUT_FORMAT_DESCRIPTION = "<no format>"
     temp_root = None
     start_time = datetime.now()
     email_template_error_text = DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT
@@ -404,6 +415,9 @@ def handler(event, context):
         output_path = event.get("output_path", DEFAULT_OUTPUT_PATH)
         to_emails = event.get("to_emails", None)
         from_email = event.get("from_email", DEFAULT_FROM_EMAIL) or DEFAULT_FROM_EMAIL
+        USERNAME = event.get("username", USERNAME)
+        OUTPUT_FORMAT = event.get("output_format", OUTPUT_FORMAT)
+        OUTPUT_FORMAT_DESCRIPTION = event.get("output_format_description", OUTPUT_FORMAT_DESCRIPTION)
         to_emails, unverified_emails = verify_emails(to_emails)
         if len(to_emails) == 0:
             to_emails.append(ADMIN_EMAIL)
@@ -608,7 +622,7 @@ def handler(event, context):
                 "instanceruns" : INSTANCERUNS,
             }
             email_html, email_text = parse_email_templates(email_template_html, email_template_text, **template_params)
-            send_email(from_email, to_emails, EMAIL_SUBJECT, email_html, email_text, attachments)
+            send_email(from_email, to_emails, format_subject(EMAIL_SUBJECT), email_html, email_text, attachments)
     except QPCRError as e:
         # Custom errors: Text of the error is a string of a JSON array. Each item in the array is either text or an array
         # of text. The error email will have all text, separated by breaks, and all subarrays converted to pretty lists.

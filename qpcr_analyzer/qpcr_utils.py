@@ -35,8 +35,13 @@ MAIN_COL_BL_CT = "main_col_bl_ct"
 MAIN_COL_CT_AVG = "main_col_ct_avg"
 MAIN_COL_CT = "main_col_ct"
 
-# Regex for searching for tags, eg {value_0|MISSING}. MISSING is alternate text to include if the tag is not available.
-PARSE_VALUES_REGEX = "\{(%s)(:?[^\s|]*)(\|?[^\}]*)\}"
+# Regex for searching for tags, eg {value_0:0.3f|BLANK|MISSING}. BLANK is an optional alternate text to show if the value exists but is empty (ie. value_0="" or None)
+# MISSING is alternate text to use if the value doesn't exist (ie. value_0 doesn't exit)
+# $1 = "value_0"
+# $2 = ":0.3f"
+# $3 = "|BLANK"
+# $4 = "|MISSING"
+PARSE_VALUES_REGEX = "\{(%s)(:?[^\s|]*)(\|?[^\}\|]*)(\|?[^\}]*)\}"
 PARSE_VALUES_REGEX_ANYKEY = re.compile(PARSE_VALUES_REGEX % "[0-9A-Za-z_\.]*", flags=re.IGNORECASE)
 
 class QPCRError(Exception):
@@ -130,7 +135,7 @@ def flatten(arr):
     res = [arr]
     return res
 
-def parse_df_values(s, columns_source, cur_row):
+def parse_colrow_tags(s, columns_source, cur_row):
     """
     """
     all_matches = set(re.findall("{([^}]*)}", s))
@@ -313,19 +318,22 @@ def parse_values(v, **kwargs):
                 match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
                 if match is not None:
                     # We found a string in curly braces!
-                    # The format is {key:fmt|alt_text}, where {key:fmt} is passed to the string's
-                    # format call, and alt_text is used if the key does not exist in format_args.
-                    # If alt_text is not specified and if the key is not found in format_args then
-                    # we keep the tag in the string unmodified.
+                    # The format is {key:fmt|blank|missing}, where {key:fmt} is passed to the string's
+                    # format call, blank is used if the key exists but is blank, and missing is used if
+                    # the key doesn't exist. If missing is not specified and key does not exist then
+                    # we keep the full tag in the string unmodified.
                     key = match[1].lower()
                     fmt = match[2]
-                    alt_text = match[3]
-                    has_alt_text = len(alt_text) > 0
+                    blank_text = match[3]
+                    missing_text = match[4]                                        
                     sub_str = "{%s%s}" % (key, fmt)
                     if key in format_args.keys():
-                        replace = sub_str.format(**format_args)
-                    elif has_alt_text:
-                        replace = alt_text[1:]
+                        if len(blank_text) > 0 and (pd.isna(format_args[key]) or str(format_args[key]) == ""):
+                            replace = blank_text[1:]
+                        else:
+                            replace = sub_str.format(**format_args)
+                    elif len(missing_text) > 0:
+                        replace = missing_text[1:]
             except Exception as e:
                 print("EXCEPTION:", e)
                 pass

@@ -29,7 +29,7 @@ from qpcr_utils import (
     CAL_SHEET_FMT,
     add_sheet_name_to_colrow_name,
     flatten,
-    parse_df_values,
+    parse_colrow_tags,
 )
 
 QAQC_SHEETNAME = "QAQC-{}"
@@ -101,6 +101,12 @@ class QPCRQAQC(object):
     def has_qaqc(self):
         return self.qaqc_config is not None
 
+    def get_next_qaqc_row(self):
+        """Get the next empty row number in the QA/QC sheet. The row number is the Excel row number
+        (ie. first row (1) is header, then the data rows start at row 2)
+        """
+        return len(self.qaqc_df.index) + 2        
+
     def init_qaqc(self, wb, group):
         """Initialize the QAQC Worksheet for the specified group name. The group is usually an analysis date.
         """
@@ -149,7 +155,6 @@ class QPCRQAQC(object):
         self.qaqc_run_ntc(self.current_name, df, full_df)
         self.qaqc_run_sample_data_available(self.current_name)
         # self.qaqc_run_no_detections(self.current_name)
-        self.qaqc_run_value_in_range(self.current_name, df)
         self.qaqc_run_standard_curves(self.current_name)
         self.qaqc_run_standard_curve_inter_comparisons(self.current_name)
         self.qaqc_run_samples_within_standard_curves(self.current_name)
@@ -158,6 +163,7 @@ class QPCRQAQC(object):
         self.qaqc_run_inhibition(self.current_name)
         self.qaqc_run_comparable_genes(self.current_name)
         self.qaqc_run_copies_outliers(self.current_name)
+        self.qaqc_run_non_detects(self.current_name)
 
     def excel_range_check_formula(self, rng, value_refs, combine_func):
         """Create an Excel formula to check if values are within the specified range (without the leading '=').
@@ -219,7 +225,7 @@ class QPCRQAQC(object):
             If True then the validation fails if the lower limit, upper limit, or value are errors in the
             QAQC spreadhsheet. If False then the validation succeeds.
         override_formula : str
-            If not None, then the formula to use. It is parsed by calling parse_df_values and will accept
+            If not None, then the formula to use. It is parsed by calling parse_colrow_tags and will accept
             tags for row_num (the row the formula will be in the QAQC sheet), and other tags such as
             {col='Column Name'}, etc. It will also be combined with accept_blanks to allow validation of
             blank values to pass.
@@ -231,13 +237,13 @@ class QPCRQAQC(object):
             column is in the range specified in the LOWER_LIMIT_COL and UPPER_LIMIT_COL columns).
         """
         if row_num is None:
-            row_num = len(self.qaqc_df.index) + 2
+            row_num = self.get_next_qaqc_row()
         formula = override_formula or QAQC_DEFAULT_VALIDATES_FORMULA
         if accept_blanks:
             formula = f"OR({formula}, {QAQC_ACCEPT_BLANK_FORMULA})"
         errors_result = "FALSE" if fail_if_errors else "TRUE"
         formula = f"IF({QAQC_DEFAULT_ISERROR}, {errors_result}, {formula})"
-        return "={}".format(parse_df_values(formula, self.qaqc_df, row_num))
+        return "={}".format(parse_colrow_tags(formula, self.qaqc_df, row_num))
 
     def qaqc_run_per_sample(self, name, match_genes, sheet_name, match_col_name, match_row_name, rng, populate_data_func, accept_blanks=False, fail_if_errors=True, mode="flatten"):
         """Go through the specified generated spreadsheet and call a callback (with data) for each row. The
@@ -287,10 +293,14 @@ class QPCRQAQC(object):
                 if match_genes is None or len(match_genes) == 0 or (row_gene is not None and row_gene.lower() in match_genes):
                     cols = self.populator.get_named_columns(sheet_name, target_column)
                     if mode == "flatten":
+                        # Flatten, then call callback once per item in the flattened array
                         cols = flatten(cols)
                     elif mode == "one_per_match":
+                        # Call callback with a single value for each match, ie. call for [cola[0], colb[0], ... coln[0]], then
+                        # [cola[1], colb[1], ..., coln[1]], ...
                         cols = np.transpose(cols).tolist()
                     elif mode == "all_at_once":
+                        # Flatten, then call callback once with the entire flattened array
                         cols = [flatten(cols)]
                     elif mode == "separate_groups":
                         pass
@@ -579,7 +589,7 @@ class QPCRQAQC(object):
                         qaqc_data[CELL_B_COL] = self.make_cell_link(cell_ref_b)
                         qaqc_data[VALUE_COL] = f"=ABS({cell_ref_a}-{cell_ref_b})"
                         value_ref = "{col='Value'}{row}"
-                        value_ref = parse_df_values(value_ref, self.qaqc_df, len(self.qaqc_df.index)+2)                        
+                        value_ref = parse_colrow_tags(value_ref, self.qaqc_df, self.get_next_qaqc_row())                        
                             
                         depth = 0
                         upper_range_formula = ""
@@ -601,33 +611,87 @@ class QPCRQAQC(object):
             print("WARNING: 'inhibition' does not exist in QAQC config file")
             return
 
-        for inhibition in self.qaqc_config.inhibition:
-            self.qaqc_run_per_sample(name, [], MAIN_SHEET, inhibition.columns, MAIN_ROW_DATA, inhibition.abs_delta_range, partial(self.populate_qaqc_inhibition, inhibition), accept_blanks=True, mode="one_per_match")
+        self.qaqc_run_value_in_range(name, self.qaqc_config.inhibition)
 
-    def populate_qaqc_inhibition(self, inhibition_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
-        cell_ref_a = f"'{target_sheet_name}'!{cur_col[0]}{cur_row}"
-        cell_ref_b = f"'{target_sheet_name}'!{cur_col[1]}{cur_row}"
-        qaqc_data[CATEGORY_COL] = inhibition_info.category.format(gene=gene)
-        qaqc_data[DESC_COL] = inhibition_info.description.format(gene=gene)
-        qaqc_data[PRIORITY_COL] = inhibition_info.priority
-        qaqc_data[NOTES_COL] = f"=\"Value is ABS(\"&ROUND({cell_ref_a},4)&\"-\"&ROUND({cell_ref_b},4)&\")\""
-        qaqc_data[VALUE_COL] = f"=IF(AND(ISNUMBER({cell_ref_a}), ISNUMBER({cell_ref_b})), ABS({cell_ref_a}-{cell_ref_b}), \"\")"
-        return True
-
-    def qaqc_run_value_in_range(self, name, df):
-        if "value_in_range" not in self.qaqc_config:
-            print("WARNING: 'value_in_range' does not exist in QAQC config file")
+    def qaqc_run_non_detects(self, name):
+        if "non_detects" not in self.qaqc_config:
+            print("WARNING: 'non_detects' does not exist in QAQC config file")
             return
 
-        for range_config in self.qaqc_config.value_in_range:
-            self.qaqc_run_per_sample(name, range_config.genes, MAIN_SHEET, range_config.columns, MAIN_ROW_DATA, range_config.range, partial(self.populate_qaqc_value_in_range, range_config), accept_blanks=True)
+        self.qaqc_run_value_match(name, self.qaqc_config.non_detects)
+
+    # def populate_qaqc_inhibition(self, inhibition_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
+    #     gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+    #     if inhibition_info.mode == "2col":
+    #         cell_ref_a = f"'{target_sheet_name}'!{cur_col[0]}{cur_row}"
+    #         cell_ref_b = f"'{target_sheet_name}'!{cur_col[1]}{cur_row}"
+    #         qaqc_data[NOTES_COL] = f"=\"Value is ABS(\"&ROUND({cell_ref_a},4)&\"-\"&ROUND({cell_ref_b},4)&\")\""
+    #         qaqc_data[VALUE_COL] = f"=IF(AND(ISNUMBER({cell_ref_a}), ISNUMBER({cell_ref_b})), ABS({cell_ref_a}-{cell_ref_b}), \"\")"
+    #     elif inhibition_info.mode == "1col":
+    #         cell_ref_a = f"'{target_sheet_name}'!{cur_col}{cur_row}"
+    #         qaqc_data[VALUE_COL] = QAQC_VALUE_FORMULA.format(cell_ref=cell_ref_a)
+
+    #     qaqc_data[CATEGORY_COL] = inhibition_info.category.format(gene=gene)
+    #     qaqc_data[DESC_COL] = inhibition_info.description.format(gene=gene)
+    #     qaqc_data[PRIORITY_COL] = inhibition_info.priority
+    #     return True
+
+    def qaqc_run_value_in_range(self, name, config):
+        for range_config in config:
+            self.qaqc_run_per_sample(name, range_config.get("genes", []), MAIN_SHEET, range_config.columns, MAIN_ROW_DATA, range_config.range, partial(self.populate_qaqc_value_in_range, range_config), accept_blanks=range_config.get("accept_blanks", True), mode="flatten")
 
     def populate_qaqc_value_in_range(self, range_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
         qaqc_data[CATEGORY_COL] = range_config.category.format(gene=gene, range=rng)
         qaqc_data[DESC_COL] = range_config.description.format(gene=gene, range=rng)
         qaqc_data[PRIORITY_COL] = range_config.priority
+        return True
+
+    def qaqc_run_value_match(self, name, config):
+        for match_config in config:
+            self.qaqc_run_per_sample(name, match_config.get("genes", []), MAIN_SHEET, match_config.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_value_match, match_config), accept_blanks=True, mode="flatten")
+
+    def populate_qaqc_value_match(self, match_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
+        bad_matches = match_config.get("bad_matches", None)
+        good_matches = match_config.get("good_matches", None)
+        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+        qaqc_data[CATEGORY_COL] = match_config.category.format(gene=gene)
+        qaqc_data[DESC_COL] = match_config.description.format(gene=gene)
+        qaqc_data[PRIORITY_COL] = match_config.priority
+
+        value_cell = parse_colrow_tags("{col='Value'}{row}", self.qaqc_df, self.get_next_qaqc_row())
+        good_formulas = []
+        bad_formulas = []
+        info = []
+        for idx, matches in enumerate((good_matches, bad_matches)):
+            if matches is None:
+                continue
+            for match in matches:
+                try:
+                    match_val = float(match_val)
+                except:
+                    match_val = str(match).replace('"', '""')
+                    match_val = f'"{match_val}"'
+                current_expr = f"{value_cell}={match_val}"
+                if idx == 0:
+                    good_formulas.append(current_expr)
+                    info.append(f"{match}")
+                else:
+                    bad_formulas.append(current_expr)
+                    info.append(f"!{match}")
+
+        exprs = []
+        if len(good_formulas) == 0:
+            good_formulas.append("TRUE")
+        if len(bad_formulas) == 0:
+            bad_formulas.append("FALSE")
+        exprs.append("OR({})".format(",".join(good_formulas)))
+        exprs.append("NOT(OR({}))".format(",".join(bad_formulas)))
+        full_expr = "AND({})".format(",".join(exprs)) if len(exprs) > 0 else "TRUE"
+        
+        qaqc_data[LOWER_LIMIT_COL] = "Matches={}".format(",".join(info))
+        qaqc_data[UPPER_LIMIT_COL] = None
+        qaqc_data[VALIDATES_COL] = f"={full_expr}"
         return True
 
     def qaqc_run_loq(self, name):
@@ -1033,8 +1097,8 @@ class QPCRQAQC(object):
             for idx, (data, row_names) in enumerate(zip(main_info["row_data"], main_info["row_names"])):
                 if target_rows in row_names:
                     current_row = idx+first_row
-                    format_columns = [parse_df_values(c, self.populator.main_columns, cur_row=current_row) for c in formatting.format_columns]
-                    formula = parse_df_values(test, self.populator.main_columns, cur_row=current_row)
+                    format_columns = [parse_colrow_tags(c, self.populator.main_columns, cur_row=current_row) for c in formatting.format_columns]
+                    formula = parse_colrow_tags(test, self.populator.main_columns, cur_row=current_row)
                     r = Rule(type="expression", dxf=self.styles[formatting.priority]["dxf"], stopIfTrue=False)
                     r.formula = [formula]
                     for column in format_columns:
@@ -1042,7 +1106,7 @@ class QPCRQAQC(object):
                         self.append_formatting_rule(main_ws, formatting.priority, column, r)
 
     def qaqc_highlight_no_detections_rows(self):
-        all_no_detections_config = self.qaqc_config.get("no_detections", None)
+        all_no_detections_config = self.qaqc_config.get("no_detection_rows", None)
         if all_no_detections_config is None:
             return
 

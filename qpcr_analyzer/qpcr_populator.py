@@ -2205,22 +2205,22 @@ if __name__ == "__main__":
             # "qaqc" : "qaqc_ottawa_b117.yaml",
 
             # Ottawa Wide
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-aug23.xlsx",
-            # # "input_file" : "odmdata/odm_merged-test.xlsx",
-            # "template_file" : "qpcr_template_ottawa_wide.xlsx",
-            # "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_wide_diff.yaml"],
-            # "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
+            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-aug19.xlsx",
+            # "input_file" : "odmdata/odm_merged-test.xlsx",
+            "template_file" : "qpcr_template_ottawa_wide.xlsx",
+            "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_wide_diff.yaml"],
+            "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
 
             # Ottawa Long
-            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-errb.xlsx",
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
-            "template_file" : "qpcr_template_ottawa.xlsx",
-            "config" : ["qpcr_populator_ottawa.yaml"],
-            "qaqc" : ["qaqc_ottawa.yaml"],
+            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-aug19.xlsx",
+            # # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
+            # "template_file" : "qpcr_template_ottawa.xlsx",
+            # "config" : ["qpcr_populator_ottawa.yaml"],
+            # "qaqc" : ["qaqc_ottawa.yaml"],
 
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/{site_parent_title}/populated - {site_parent_title} - Test.xlsx",
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/{parent_site_title}/out-aug9 - {parent_site_title} - {site_id}.xlsx",
-            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/Error output - b.xlsx",
+            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/populated-aug19-wide.xlsx",
             "hide_qaqc" : False,
             "overwrite" : True,
 

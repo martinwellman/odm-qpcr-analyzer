@@ -10,4 +10,4 @@ main_worksheet : "Main"
 # Otherwise we assume the source file isn't in the correct format. Include however many headings you like, but
 # try to only include main ones that are unlikely to change in the future and that will differentiate us from other 
 # input files that we don't want to update.
-required_source_headers : ["sample_date", "qpcr_date", "sample_id", "site", "outlier", "respect_lod"]
+required_source_headers : ["sample_date", "qpcr_date", "sample_id", "site", "outlier"]

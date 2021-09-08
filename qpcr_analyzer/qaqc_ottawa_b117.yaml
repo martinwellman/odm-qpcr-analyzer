@@ -1,36 +1,8 @@
-qaqc_priorities : [
-    # Highlighting of priorities earlier in this list take precedence (ie. more serious errors should go first)
-    {
-        name : "Very High",
-        fill : "FFFF00",
-        font : "000000",
-        bold : True,
-    },
-    {
-        name : "High",
-        fill : "FF8C8C",
-        font : "9E0000",
-        bold : True,
-    },
-    {
-        name : "Low",
-        fill : "BFBFBF",
-        font : "3D3D3D",
-        bold : False,
-    },
-    {
-        name : "Good",
-        fill : "00CE00",
-        font : "000000",
-        bold : True,
-    },
-]
-
 no_detections : [
     {
         category : "Ct Detection",
         description : "Samples require amplification",
-        priority : "Very High",
+        priority : "Very Low",
         columns : ["main_col_ct", "main_col_ct_b", "main_col_ct_c"],
         genes : [],
         min_detections : 1,

@@ -29,7 +29,26 @@ column_genes : {
 conditional_formatting : [
     {
         priority : "High",
-        test : "NOT({col='respect_lod'}{row})",
-        format_columns : [ "{col='respect_lod'}{row}" ],
+        test : "{col='respect_loq'}{row}<2",
+        format_columns : [ "{col='respect_loq'}{row}" ],
     }
+]
+
+loq : [
+    {
+        category : "LOQ",
+        description : "Test above LOQ [copies per well, {gene}]",
+        priority : "High",
+        genes : [ ],
+        copies_per_well_range : [ 4, NULL ],
+        columns : [ "main_col_copies" ],
+    },
+    {
+        category : "LOQ",
+        description : "Test above LOQ [copies per well, {gene}]",
+        priority : "High",
+        genes : [ ],
+        copies_per_well_range : [ 6, NULL ],
+        columns : [ "main_col_copies_b" ],
+    },
 ]

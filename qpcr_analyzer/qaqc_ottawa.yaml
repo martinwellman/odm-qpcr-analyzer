@@ -1,36 +1,64 @@
 qaqc_priorities : [
     # Highlighting of priorities earlier in this list take precedence (ie. more serious errors should go first)
     {
-        name : "Very High",
-        fill : "FFFF00",
-        font : "C00000",
+        name : "Highest",
+        fill : "FF0000",
+        font : "000000",
         bold : True,
     },
     {
         name : "High",
-        fill : "FF8C8C",
+        fill : "FF7D7D",
         font : "9E0000",
         bold : True,
     },
     {
+        name : "Medium",
+        fill : "F7CAAC",
+        font : "833C0B",
+        bold : True,
+    },
+    {
+        name : "Medium Low",
+        fill : "FFF2CC",
+        font : "000000",
+        bold : False,
+    },
+    {
         name : "Low",
-        fill : "BFBFBF",
-        font : "3D3D3D",
+        fill : "D0CECE",
+        font : "3B3838",
+        bold : False,
+    },
+    {
+        name : "Very Low",
+        fill : "D5DCE4",
+        font : "3B3838",
         bold : False,
     },
     {
         name : "Good",
-        fill : "00CE00",
+        fill : "00CC00",
         font : "000000",
         bold : True,
     },
 ]
 
-no_detections : [
+non_detects : [
+    {
+        category : "Non-detect",
+        description : "Test for non-detects",
+        priority : "Very Low",
+        columns : [ "main_col_ct", "main_col_ct_b", "main_col_bl_ct", "main_col_inhibition_10_ct", "main_col_inhibition_40_ct", "main_col_inhibition_nodil_ct" ],
+        bad_matches : [ "<ND>", "<MISSING>" ],
+    },
+]
+
+no_detection_rows : [
     {
         category : "Ct Detection",
         description : "Samples require at least one Ct value",
-        priority : "Very High",
+        priority : "Very Low",
         columns : ["main_col_ct", "main_col_ct_b"],
         genes : [],
         min_detections : 1,
@@ -40,7 +68,7 @@ no_detections : [
 sample_data_available : {
     category : "Samples Data",
     description : "Samples sheet data available (sample date, tube empty/full weight...)",
-    priority : "Very High",
+    priority : "Very Low",
     columns : ["main_col_sample_date"],
     not_available_matches : [ "NaT", "", 0 ],
     genes : [],
@@ -61,14 +89,22 @@ standard_curves : {
 
             genes : [ "covN1", "covN2" ],
             slope_range : [ -3.74, -3.00 ],
-            intercept_range : [ 38.28, 39.45 ],
+            intercept_range : [ 37.00, 39.45 ],
             rsq_range : [ 0.95, NULL ],
             average_replicates_range : [
-                [ 29.00, 30.99 ],
-                [ 30.91, 33.52 ],
-                [ 32.88, 35.50 ],
-                [ 34.36, 36.47 ],
+                [ 28.00, 29.99 ],
+                [ 29.91, 32.52 ],
+                [ 31.88, 34.50 ],
+                [ 33.36, 35.47 ],
+                [ 34.05, 36.65 ],
                 [ 35.05, 37.65 ],
+
+                # Old (for 1.5 uL)
+                # [ 29.00, 30.99 ],
+                # [ 30.91, 33.52 ],
+                # [ 32.88, 35.50 ],
+                # [ 34.36, 36.47 ],
+                # [ 35.05, 37.65 ],
             ],
         },
         {
@@ -87,11 +123,11 @@ standard_curves : {
             intercept_range : [ 37.23, 40.84 ],
             rsq_range : [ 0.95, NULL ],
             average_replicates_range : [
-                [ 22.61, 24.77 ],
-                [ 24.40, 26.61 ],
-                [ 26.12, 28.70 ],
-                [ 28.19, 30.60 ],
-                [ 29.97, 32.88 ],
+                [ 22.81, 24.97 ],
+                [ 24.60, 26.81 ],
+                [ 26.32, 28.90 ],
+                [ 28.39, 30.60 ],
+                [ 30.17, 33.08 ],
             ],
         },
     ],
@@ -99,7 +135,7 @@ standard_curves : {
         {
             category : "Calibration Curve",
             description : "{gene_a}, {gene_b} standards #{std_num} comparable",
-            priority : "High",
+            priority : "Medium",
             genes : [ "covN1", "covN2" ],
             abs_diff_max : [
                 0.6,
@@ -127,7 +163,7 @@ comparable_genes : [
     {
         category : "Comparable Samples",
         description : "Average Ct comparable [abs({gene_a}(Ct) - {gene_b}(Ct))]",
-        priority : "High",
+        priority : "Medium",
         genes : [ "covn1", "covn2" ],
         ranges : [
             {
@@ -149,18 +185,24 @@ loq : [
         category : "LOQ",
         description : "Test above LOQ [copies per well, {gene}]",
         priority : "High",
-        genes : [ ],
-        copies_per_well_range : [ 0.6, NULL ],
-        columns : [ "main_col_copies", "main_col_copies_b" ],
-    }
+        genes : [ "covN1" ],
+        copies_per_well_range : [ 4, NULL ],
+        columns : [ "main_col_copies" ],
+    },
+    {
+        category : "LOQ",
+        description : "Test above LOQ [copies per well, {gene}]",
+        priority : "High",
+        genes : [ "covN2" ],
+        copies_per_well_range : [ 6, NULL ],
+        columns : [ "main_col_copies" ],
+    },
 ]
 
 baseline_ct_range : {
-    # @TODO: MDL is an unknown site ID
-    # @TODO: Missing ranges for Barrie (B) and Casselman (Cas)
     category : "Baseline",
     description : "Baseline {gene} Ct in range [site: {site}]",
-    priority : "High",
+    priority : "Medium Low",
     gene : "nPMMoV",
     ranges : {
         "o" : [25.00, 28.00],
@@ -178,24 +220,26 @@ baseline_ct_range : {
         "uo_np" : [28.00, 31.00],
         "uo_nt" : [28.00, 31.00],
         "uo_st" : [28.00, 31.00],
-        "h_mh" : [28.00, 31.00],    # Used to be MDL
+        "h_mh" : [28.00, 31.00],
     }
 }
 
 inhibition : [
     {
         category : "Inhibition",
-        description: "Test for inhibition: No dilution vs 1/10 dilution [{gene}, abs(AvgCt-AvgCt)]",
+        description: "Test for inhibition: No dilution vs 1/10 dilution",
         priority : "High",
-        columns : [ "main_col_inhibition_nodil_ct_avg", "main_col_inhibition_10_ct_avg" ],
-        abs_delta_range : [2.6, 3.6],
+        columns : [ "main_col_inhibition_10_nodil_dct" ],
+        range : [2.6, 3.6],
+        accept_blanks : False,
     },
     {
         category : "Inhibition",
-        description: "Test for inhibition: No dilution vs 1/40 dilution [{gene}, abs(AvgCt-AvgCt)]",
+        description: "Test for inhibition: No dilution vs 1/40 dilution",
         priority : "High",
-        columns : [ "main_col_inhibition_nodil_ct_avg", "main_col_inhibition_40_ct_avg" ],
-        abs_delta_range : [4.0, 6.0],
+        columns : [ "main_col_inhibition_40_nodil_dct" ],
+        range : [4.0, 6.0],
+        accept_blanks : False,
     },
 ]
 
@@ -203,7 +247,7 @@ copies_outliers : [
     {
         category : "Copies Outliers",
         description : "Copies per mass outliers [{gene}]",
-        priority : "Low",
+        priority : "Medium Low",
         columns : ["main_col_copies_per_mass", "main_col_copies_per_mass_b"],
         # columns : "main_col_copies_per_mass",
         num_stdev : 1,
@@ -211,7 +255,7 @@ copies_outliers : [
     {
         category : "Copies Outliers",
         description : "Copies per copies outliers [{gene}]",
-        priority : "Low",
+        priority : "Medium Low",
         columns : ["main_col_copies_per_copies", "main_col_copies_per_copies_b"],
         # columns : "main_col_copies_per_copies",
         num_stdev : 1,
@@ -219,7 +263,7 @@ copies_outliers : [
     {
         category : "Copies Outliers",
         description : "Copies per L outliers [{gene}]",
-        priority : "Low",
+        priority : "Medium Low",
         columns : ["main_col_copies_per_volume", "main_col_copies_per_volume_b"],
         # columns : "main_col_copies_per_volume",
         num_stdev : 1,
@@ -231,7 +275,7 @@ ntcs : [
         category : "NTC",
         description : "NTC test for contamination: {gene} (Ct)",
         unit_other : "Ct_NTC",
-        priority : "Very High",
+        priority : "Highest",
         genes : [ "covN1", "covN2" ],
         ct_range : [ NULL, NULL ],
         source_max : "all_gene_ct",         # "all_gene_ct" | "cal_gene_ct"
@@ -241,7 +285,7 @@ ntcs : [
         category : "NTC",
         description : "NTC test for contamination: {gene} (Ct)",
         unit_other : "Ct_NTC",
-        priority : "Very High",
+        priority : "Highest",
         genes : [ "nPMMoV", "nPMMoV_dil10", "nPMMoV_dil40" ],
         ct_range : [ 38, NULL ],
         source_max : "all_gene_ct",         # "all_gene_ct" | "cal_gene_ct"
@@ -251,7 +295,7 @@ ntcs : [
         category : "EB",
         description : "Extraction blank: {gene} (Ct)",
         unit_other : "Ct_EB",
-        priority : "Very High",
+        priority : "Highest",
         genes : [ ], #[ "covN1", "covN2", "nPMMoV" ],
         ct_range : [ NULL, NULL ],
         source_max : "all_gene_ct",         # "all_gene_ct" | "cal_gene_ct"
@@ -288,7 +332,7 @@ cal_ct_outliers : [
 ]
 
 failed_categories : {
-    failed_priority : "Very High",
+    failed_priority : "Highest",
     success_priority : "Good",
     empty_priority : "Good",
 }

@@ -92,7 +92,7 @@ print(f"The ODM output file can be found at: {mapper_output_file}")
 print("="*40)
 print("Running QPCRPopulator")
 
-populator_output_file = "output/populated/populated-sample.xlsx"
+populator_output_file = "output/populated/populated-sample - {datetime}.xlsx"
 populator_template_file = "../qpcr_analyzer/qpcr_template_ottawa.xlsx"
 populator_config = "../qpcr_analyzer/qpcr_populator_ottawa.yaml"
 populator_qaqc_config = "../qpcr_analyzer/qaqc_ottawa.yaml"
