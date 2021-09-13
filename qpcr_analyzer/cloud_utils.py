@@ -228,7 +228,7 @@ def upload_file(file_name, upload_path):
                 os.makedirs(os.path.dirname(upload_path), exist_ok=True)
             shutil.copy(file_name, upload_path)
             return True
-        except:
+        except Exception as e:
             print(f"Exception uploading {file_name} to local destination {upload_path}: {e}")
             return False
 

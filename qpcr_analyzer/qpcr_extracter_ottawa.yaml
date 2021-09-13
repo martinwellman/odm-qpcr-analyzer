@@ -83,7 +83,13 @@ string_mapper : [
     # },
     {
         columns : "Target",
-        match : "^(pepper|pmmov|npmmov)\\s*([0-9]*)$",
+        match : "1:([0-9]*)",   # eg 1:10, 1:40 for 10 or 40 dilutions of Pepper. Replace with "10" or "40".
+        replace : "\\1",
+        ignore_case : True,
+    },
+    {
+        columns : "Target",
+        match : "^(pepper|pmmov|npmmov|pep)\\s*([0-9]*)$",
         replace : "Pepper\\2",
         ignore_case : True,
     },

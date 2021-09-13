@@ -767,9 +767,31 @@ if __name__ == "__main__":
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug23/qPCR-2021-08-23.pdf",
 
                 # Aug 19
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_PEPPER_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N2_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",                
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_PEPPER_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N2_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",                
+
+                # Sep 10
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N1 O 09.09 H 09.07 HD 09.08-09.09 AC 09.08 uO 09.09 4A 28 12A 28 20A 28 ST.pdf",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N2 O 09.09 H 09.07 HD 09.07-09 AC 09.08 uO 09.08-09.10  4A 28 12A 28 20A 28.pdf",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 Pep O H AC uO 4A C C 28.pdf",
+
+                # Sep 7-10
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-07 N1 N2 Ottwa rerun.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qpCR-2021-09-07 Pep O 09.03-09.06 VC 09.02 09.05 ST.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-08 N1 O 09.08 H09.02-04 AC09.03-09.07 AW09.07 uO 09.07-09.08 ST.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-08 N2 O H AC Aw uO.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-08 Pep O H H_D AC Aw uO ST.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-08 Pep uO.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-09 N1 N2 Pep O 09.08 VC 09.07.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-09 Pep O VC 09.08.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-10 N1 O 09.09 H 09.07 HD 09.08-09.09 AC 09.08 uO 09.09 4A 28 12A 28 20A 28 ST.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-10 N2 O 09.09 H 09.07 HD 09.07-09 AC 09.08 uO 09.08-09.10  4A 28 12A 28 20A 28.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-10 Pep O H AC uO 4A C C 28.pdf",
+
+                # Sep 9
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-09 N1 N2 Pep O 09.08 VC 09.07.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-09 Pep O VC 09.08.pdf",
 
                 # Aug 9
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug09/qPCR-2021-08-10 PMMoV VC Aug 9 Aw Aug 9.pdf",
@@ -796,7 +818,7 @@ if __name__ == "__main__":
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-aug19.xlsx",
+            "output_file" : "merged-sep10.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,

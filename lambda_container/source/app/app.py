@@ -26,7 +26,9 @@ Flow
 """
 
 import os
+import sys
 import shutil
+import importlib
 from datetime import datetime
 import re
 import tempfile
@@ -60,6 +62,9 @@ TEMP_DIR = None            # Set to None (preferred) to get a new tempdir with t
 OVERRIDE_RUNID = None      # Set to None (preferred) to create a new unique run ID
 DELETE_TEMP_DIR = True     # Set to True (preferred) to delete the temp dir once done
 UPLOAD_RESULTS = False
+
+# Will be retrieved from the passed in parameter "output_debug"
+OUTPUT_DEBUG = False
 
 # @TODO: Implement this
 DELETE_INPUTS = True       # Set to True to delete the S3 inputs directory
@@ -100,6 +105,9 @@ INSTANCERUNS = 0
 USERNAME = None
 OUTPUT_FORMAT = None
 OUTPUT_FORMAT_DESCRIPTION = None
+
+INPUTS_ZIP_FILE = "Inputs - {date} - {time}.zip"
+EXTRACTED_ZIP_FILE = "Extracted - {date} - {time}.zip"
 
 def make_zip_file(file_name, *files):
     """Make a zip file containing a list of files.
@@ -278,9 +286,9 @@ def format_file_name(file, clean_name=True, **kwargs):
         time=RUNDATETIME(time), datetime=RUNDATETIME(year and time).
     """
     name = parse_values(file,
-        date=RUNDATETIME.strftime("%Y-%m-%d"),
-        time=RUNDATETIME.strftime("%H:%M:%S"),
-        datetime=RUNDATETIME.strftime("%Y-%m-%d-%H:%M:%S"),
+        date=cleanup_file_name(RUNDATETIME.strftime("%Y-%m-%d")),
+        time=cleanup_file_name(RUNDATETIME.strftime("%H:%M:%S")),
+        datetime=cleanup_file_name(RUNDATETIME.strftime("%Y-%m-%d_%H:%M:%S")),
         **kwargs)[0]
     file_name = os.path.splitext(name)[0]
     name = "{}{}".format(cleanup_file_name(file_name) if clean_name else file_name, os.path.splitext(name)[1])
@@ -371,16 +379,39 @@ def send_error_email(to_emails, email_template_html, email_template_text, messag
     email_html, email_text = parse_email_templates(email_template_html, email_template_text, messages=messages, stack_trace=stack_trace, **kwargs)
     send_email(DEFAULT_FROM_EMAIL, to_emails, format_subject(ERROR_SUBJECT), email_html, email_text)
 
-    # with open("error.txt", "w") as f:
-    #     f.write(email_text)
-    # with open("error.html", "w") as f:
-    #     f.write(email_html)
+def add_debug_info(info):
+    """Add debug info to the passed in list. This includes the Python version number, versions of some packages, Lambda function version,
+    and Lambda memory.
+    """
+    info.append("Python version: {}".format(sys.version_info))
 
+    # Add all available version info of the required packages. Not all will be included,
+    # only those whose import package name is the same as the package name in requirements.txt
+    with open("requirements.txt", "r") as f:
+        reqs = f.read().split("\n")
+    new_info = []
+    for req in reqs:
+        if not req:
+            continue
+        try:
+            module = importlib.import_module(req)
+            new_info.append(f"Package {req}: {module.__version__}")
+        except:
+            # new_info.append(f"Package {req}: <unknown>")
+            pass
+
+    if "AWS_LAMBDA_FUNCTION_VERSION" in os.environ:
+        new_info.append("Function version: {}".format(os.environ["AWS_LAMBDA_FUNCTION_VERSION"]))
+    if "AWS_LAMBDA_FUNCTION_MEMORY_SIZE" in os.environ:
+        new_info.append("Memory: {}".format(os.environ["AWS_LAMBDA_FUNCTION_MEMORY_SIZE"]))
+
+    info.extend(new_info)
+    print("Added debug info:", new_info)
 
 def handler(event, context):
     """Main handler for the Lambda function.
     """
-    global RUNDATETIME, RUNID, INSTANCERUNS, TEMP_DIR, OVERRIDE_RUNID, USERNAME, OUTPUT_FORMAT, OUTPUT_FORMAT_DESCRIPTION
+    global RUNDATETIME, RUNID, INSTANCERUNS, TEMP_DIR, OVERRIDE_RUNID, USERNAME, OUTPUT_FORMAT, OUTPUT_FORMAT_DESCRIPTION, OUTPUT_DEBUG
     INSTANCERUNS += 1
     RUNDATETIME = datetime.now().astimezone(pytz.timezone("US/Eastern"))
     if OVERRIDE_RUNID is None:
@@ -397,17 +428,18 @@ def handler(event, context):
     USERNAME = "<no user>"
     OUTPUT_FORMAT = "<no format>"
     OUTPUT_FORMAT_DESCRIPTION = "<no format>"
+    OUTPUT_DEBUG = True
     temp_root = None
     start_time = datetime.now()
     email_template_error_text = DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT
     email_template_error_html = DEFAULT_EMAIL_TEMPLATE_ERROR_HTML
     try:
+        OUTPUT_DEBUG = event.get("output_debug", False)
+
         # For informational purposes. We show the settings in the report email.
         settings = event.get("descriptive_settings", [])
-        if "AWS_LAMBDA_FUNCTION_VERSION" in os.environ:
-            settings.append("Function version: {}".format(os.environ["AWS_LAMBDA_FUNCTION_VERSION"]))
-        if "AWS_LAMBDA_FUNCTION_MEMORY_SIZE" in os.environ:
-            settings.append("Memory: {}".format(os.environ["AWS_LAMBDA_FUNCTION_MEMORY_SIZE"]))
+        if OUTPUT_DEBUG:
+            add_debug_info(settings)
         settings.append("Executed on: {}".format(RUNDATETIME.strftime("%Y-%m-%d %H:%M:%S")))
 
         input_files = event.get("inputs", None)
@@ -581,7 +613,6 @@ def handler(event, context):
                 else:
                     shutil.copy(upload_file, os.path.join(output_path, os.path.basename(upload_file)))
 
-        zip_date = RUNDATETIME.strftime("%Y-%m-%d %H_%M_%S")
         attachments = populated_files.copy()
 
         # Create ZIP files of the input files and the files extracted from the BioRad PDFs. We'll attach these
@@ -589,11 +620,11 @@ def handler(event, context):
         inputs_zip_file = None
         extracted_zip_file = None
         if len(local_updated_input_files) > 0 or len(local_input_files) > 0:
-            inputs_zip_file = os.path.join(temp_root, "zips", f"Inputs - {zip_date}.zip")
+            inputs_zip_file = os.path.join(temp_root, "zips", format_file_name(INPUTS_ZIP_FILE))
             make_zip_file(inputs_zip_file, *local_updated_input_files, *local_input_files)
             attachments.append(inputs_zip_file)
         if len(raw_files) > 0:
-            extracted_zip_file = os.path.join(temp_root, "zips", f"Extracted - {zip_date}.zip")
+            extracted_zip_file = os.path.join(temp_root, "zips", format_file_name(EXTRACTED_ZIP_FILE))
             make_zip_file(extracted_zip_file, *raw_files)
             attachments.append(extracted_zip_file)
 
@@ -666,4 +697,3 @@ if __name__ == "__main__" and "get_ipython" in globals():
     with open("../../../../event.json", "r") as f:
         data = EasyDict(yaml.safe_load(f))
     handler(data, None)
-

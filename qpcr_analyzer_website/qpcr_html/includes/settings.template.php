@@ -1,6 +1,6 @@
 <?php
 
-// Save this file as settings.php and fill in S3_BUCKET, CONTACT_EMAIL, LAMBDA_FUNCTION, LAMBDA_FROM_EMAIL, and AWS_REGION.
+// Save this file as settings.php and fill in S3_BUCKET, AWS_REGION, CONTACT_EMAIL, LAMBDA_FUNCTION, LAMBDA_FROM_EMAIL, and LAMBDA_SAMPLES.
 // Change other settings if desired.
 
 require_once "users.php";
@@ -41,7 +41,7 @@ define("LAMBDA_POPULATOR_TEMPLATE",             "s3://".S3_BUCKET."/v/".QPCR_VER
 define("LAMBDA_POPULATOR_TEMPLATE_WIDE",        "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/qpcr_template_ottawa_wide.xlsx");
 define("LAMBDA_POPULATOR_TEMPLATE_B117",        "s3://".S3_BUCKET."/v/".QPCR_VERSION."/config/qpcr_template_ottawa_b117.xlsx");
 define("LAMBDA_OUTPUT_PATH",                    "s3://".S3_BUCKET."/u/{$USERNAME}/outputs/");
-define("LAMBDA_POPULATED_OUTPUT_FILE_ALL",      "Data - All.xlsx");
+define("LAMBDA_POPULATED_OUTPUT_FILE_ALL",      "Data - All - {date} - {time}.xlsx");
 define("LAMBDA_POPULATED_OUTPUT_FILE_SPLIT",    "Data - {parent_site_title}.xlsx");
 define("LAMBDA_REMOTE_TARGET_LONG",             "gd://long/{parent_site_title}/");
 define("LAMBDA_REMOTE_TARGET_WIDE",             "gd://{parent_site_title}/");

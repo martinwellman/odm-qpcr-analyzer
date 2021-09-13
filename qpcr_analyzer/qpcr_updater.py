@@ -37,9 +37,11 @@ from easydict import EasyDict
 import argparse
 from datetime import datetime
 import openpyxl
+import yaml
 from openpyxl.utils import get_column_letter
 from openpyxl.formula.translate import Translator
 import cloud_utils
+import gdrive_utils
 from qpcr_utils import (
     load_config,
 )
@@ -82,6 +84,23 @@ class QPCRUpdater(object):
     def get_remote_target_file(self, site_id):
         return self.sites.parse_filename_for_siteid(self.target_path_template, site_id)
 
+    def remove_trailing_blank_lines(self, ws):
+        """Remove all lines at the bottom of the worksheet that are blank.
+        """
+        max_row = ws.max_row
+        max_column = get_column_letter(ws.max_column)
+        top_blank_row = None
+        # Find the first blank line at end of worksheet (top_blank_row)
+        for row_num in range(max_row, 0, -1):
+            row = ws[f"A{row_num}:{max_column}{row_num}"]
+            row_values = [cell.value for cell in row[0] if cell.value]
+            if len(row_values) > 0:
+                break
+            top_blank_row = row_num
+        if top_blank_row is not None:
+            print(f"Deleting {max_row-top_blank_row+1} trailing blank rows, starting at row {top_blank_row}")
+            ws.delete_rows(top_blank_row, max_row - top_blank_row + 1)
+
     def get_target_workbook(self, site_id):
         """Get the target OpenPYXL workbook that we copy to for the specified site_id.
         """
@@ -98,6 +117,7 @@ class QPCRUpdater(object):
                 # File was downloaded so load it
                 fix_xlsx_file(local_target)
                 wb = openpyxl.load_workbook(local_target)
+                self.remove_trailing_blank_lines(self.get_main_ws(wb))
             else:
                 # File was not downloaded so create a new workbook
                 local_target = os.path.join(self.local_dir, cloud_utils.remove_prefix(remote_target))
@@ -232,6 +252,7 @@ class QPCRUpdater(object):
             if local_dir:
                 os.makedirs(local_dir, exist_ok=True)
             add_excel_calculated_values(wb_info["wb"])
+            print(f"Saving to {local_target}")
             wb_info["wb"].save(local_target)
             print(f"Uploading to {remote_target}")
             cloud_utils.upload_file(local_target, remote_target)
@@ -242,12 +263,15 @@ if __name__ == "__main__":
     if "get_ipython" in globals():
         opts = EasyDict({
             "input_files" : [
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Uottawa.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Ottawa.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/temp.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Uottawa.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Ottawa.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
             ],
-            "target_dir" : "gd://{site_parent_title}/",
-            "target_path_template" : "Data - {site_parent_title}.xlsx",
+            # "target_dir" : "gd://{site_parent_title}/",
+            "target_dir" : "gd://hidden_test/",
+            # "target_path_template" : "Data - {site_parent_title}.xlsx",
+            "target_path_template" : "Data - All - Wide Test.xlsx",
             "config" : "qpcr_updater.yaml",
             "populator_config" : "qpcr_populator_ottawa.yaml",
             "sites_config" : "sites.yaml",
@@ -264,9 +288,15 @@ if __name__ == "__main__":
         args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
         opts = args.parse_args()
     
+    # with open("../../../../event.json", "r") as f:
+    #     data = EasyDict(yaml.safe_load(f))
+    # gdrive_utils.set_creds_file("credentials.json")
+    # gdrive_utils.set_partial_token_data(data.tokens)
+    # gdrive_utils.drive_set_root_id(data.parent_drive_folder)
+
     tic = datetime.now()
     updater = QPCRUpdater(opts.config, opts.populator_config, sites_config=opts.sites_config, sites_file=opts.sites_file)
-    print("Update:", updater.update(opts.input_files, opts.target_path_template))
+    print("Update:", updater.update(opts.input_files, os.path.join(opts.target_dir, opts.target_path_template)))
     print("Upload:", updater.save_and_upload())
     toc = datetime.now()
     print("Total duration:", toc - tic)

@@ -361,7 +361,7 @@ class QPCRQAQC(object):
                     all_cells = []
 
                     # See if we should handle the current NTC gene
-                    if lower_ntc_gene == gene.lower():
+                    if gene is not None and lower_ntc_gene == gene.lower():
                         # if ntc_info.source_max != "cal_gene_ct" and lower_ntc_gene == self.config.input.baseline_id.strip().lower() and self.config.template.hide_baseline_gene_from_main:
                         # We're hiding the baseline gene from the main output, so we need to calculate the minimum Ct from the df
                         if ntc_info.source_max == "all_gene_ct":
@@ -607,18 +607,32 @@ class QPCRQAQC(object):
         return False
 
     def qaqc_run_inhibition(self, name):
-        if "inhibition" not in self.qaqc_config:
+        if "inhibitions" not in self.qaqc_config:
             print("WARNING: 'inhibition' does not exist in QAQC config file")
             return
 
-        self.qaqc_run_value_in_range(name, self.qaqc_config.inhibition)
+        inhibitions = self.qaqc_config.inhibitions
+        for inhibition in inhibitions:
+            self.qaqc_run_value_in_range(name, inhibition, MAIN_SHEET)
 
     def qaqc_run_non_detects(self, name):
         if "non_detects" not in self.qaqc_config:
             print("WARNING: 'non_detects' does not exist in QAQC config file")
             return
 
-        self.qaqc_run_value_match(name, self.qaqc_config.non_detects)
+        non_detects = self.qaqc_config.non_detects
+
+        for non_detect in non_detects:
+            sheets = non_detect.sheets
+            if isinstance(sheets, str):
+                sheets = [sheets]
+            
+            if "main" in sheets:
+                self.qaqc_run_value_match(name, non_detect, MAIN_SHEET)
+            if "cal" in sheets:
+                all_info = self.populator.get_all_cal_worksheets_and_info()
+                for info in all_info:
+                    self.qaqc_run_value_match(name, non_detect, info[1]["sheet_name"])
 
     # def populate_qaqc_inhibition(self, inhibition_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
     #     gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
@@ -636,9 +650,9 @@ class QPCRQAQC(object):
     #     qaqc_data[PRIORITY_COL] = inhibition_info.priority
     #     return True
 
-    def qaqc_run_value_in_range(self, name, config):
-        for range_config in config:
-            self.qaqc_run_per_sample(name, range_config.get("genes", []), MAIN_SHEET, range_config.columns, MAIN_ROW_DATA, range_config.range, partial(self.populate_qaqc_value_in_range, range_config), accept_blanks=range_config.get("accept_blanks", True), mode="flatten")
+    def qaqc_run_value_in_range(self, name, config, sheet_name):
+        row_name = MAIN_ROW_DATA if sheet_name == MAIN_SHEET else CAL_ROW_DATA
+        self.qaqc_run_per_sample(name, config.get("genes", []), sheet_name, config.columns, row_name, config.range, partial(self.populate_qaqc_value_in_range, config), accept_blanks=config.get("accept_blanks", True), mode="flatten")
 
     def populate_qaqc_value_in_range(self, range_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
@@ -647,9 +661,9 @@ class QPCRQAQC(object):
         qaqc_data[PRIORITY_COL] = range_config.priority
         return True
 
-    def qaqc_run_value_match(self, name, config):
-        for match_config in config:
-            self.qaqc_run_per_sample(name, match_config.get("genes", []), MAIN_SHEET, match_config.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_value_match, match_config), accept_blanks=True, mode="flatten")
+    def qaqc_run_value_match(self, name, config, sheet_name):
+        row_name = MAIN_ROW_DATA if sheet_name == MAIN_SHEET else CAL_ROW_DATA
+        self.qaqc_run_per_sample(name, config.get("genes", []), sheet_name, config.columns, row_name, None, partial(self.populate_qaqc_value_match, config), accept_blanks=True, mode="flatten")
 
     def populate_qaqc_value_match(self, match_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         bad_matches = match_config.get("bad_matches", None)
@@ -1532,3 +1546,4 @@ class QPCRQAQC(object):
         except Exception as e:
             import traceback
             traceback.print_exc()
+

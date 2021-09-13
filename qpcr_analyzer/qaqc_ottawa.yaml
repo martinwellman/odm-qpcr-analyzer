@@ -49,7 +49,8 @@ non_detects : [
         category : "Non-detect",
         description : "Test for non-detects",
         priority : "Very Low",
-        columns : [ "main_col_ct", "main_col_ct_b", "main_col_bl_ct", "main_col_inhibition_10_ct", "main_col_inhibition_40_ct", "main_col_inhibition_nodil_ct" ],
+        sheets : [ "main", "cal" ],             # "main" and/or "cal"
+        columns : [ "main_col_ct", "main_col_ct_b", "main_col_bl_ct", "main_col_inhibition_10_ct", "main_col_inhibition_40_ct", "main_col_inhibition_nodil_ct", "cal_col_ct" ],
         bad_matches : [ "<ND>", "<MISSING>" ],
     },
 ]
@@ -224,7 +225,7 @@ baseline_ct_range : {
     }
 }
 
-inhibition : [
+inhibitions : [
     {
         category : "Inhibition",
         description: "Test for inhibition: No dilution vs 1/10 dilution",

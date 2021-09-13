@@ -37,12 +37,12 @@ if __name__ == "__main__":
         opts = EasyDict({
             "config_file" : os.path.join(mapper_dir, "biorad_mapper.yaml"),
             "map_path" : os.path.join(mapper_dir, "biorad_map.csv"),
-            "lab_data" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted/merged-aug19.xlsx",
+            "lab_data" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted/merged-sep10.xlsx",
             "static_data" : "",
             "start_date" : "",
             "end_date" : "",
             "remove_duplicates" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/dupes.xlsx",
-            "output" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-aug19.xlsx",
+            "output" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-sep10.xlsx",
         })
     else:
         args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

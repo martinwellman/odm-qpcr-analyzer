@@ -369,6 +369,7 @@ function run_analyzer() {
             "descriptive_settings" => $descriptive_settings,
             "parent_drive_folder" => $parent_drive_folder,
             "hide_qaqc" => false,
+            "output_debug" => OUTPUT_DEBUG,
         ])
         ]);
         
