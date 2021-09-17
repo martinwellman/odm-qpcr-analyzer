@@ -312,7 +312,7 @@ class QPCRExtracter(object):
         num_trailing_digit_groups = 0
         for comp in comps[::-1]:
             try:
-                num = int(comp)
+                _ = int(comp)   # Will throw exception if comp isn't a string integer
                 num_trailing_digit_groups += 1
             except:
                 break

@@ -89,7 +89,7 @@ string_mapper : [
     },
     {
         columns : "Target",
-        match : "^(pepper|pmmov|npmmov|pep)\\s*([0-9]*)$",
+        match : "^(pepper|pmmov|npmmov|pep)[\\s/\\:]*([0-9]*)$",
         replace : "Pepper\\2",
         ignore_case : True,
     },

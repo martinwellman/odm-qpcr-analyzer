@@ -201,6 +201,9 @@ class QPCRUpdater(object):
 
             # Go through each row in the input file, copy them to the target file matching the site ID for that row
             for row in ws.iter_rows(min_row=2):
+                if self.is_empty_row(row):
+                    continue
+
                 site_id = row[site_col].value
                 target_wb = self.get_target_workbook(site_id)
                 target_ws = self.get_main_ws(target_wb)
@@ -225,7 +228,7 @@ class QPCRUpdater(object):
 
                 # Add the row
                 cur_row = target_ws.max_row+1
-                for col,cell in enumerate(row):
+                for col,cell in enumerate(row):                    
                     self.copy_cell(cell, target_ws[f"{get_column_letter(col+1)}{cur_row}"])
 
             success.append(True)
@@ -233,6 +236,12 @@ class QPCRUpdater(object):
         # remote_targets = self.save_all()
 
         return success
+    
+    def is_empty_row(self, row):
+        for cell in row:
+            if cell.value is not None and len(str(cell.value)) > 0:
+                return False
+        return True
 
     def save_and_upload(self):
         """Save all our target output files to disk, and upload them to the remote target if the
@@ -263,7 +272,8 @@ if __name__ == "__main__":
     if "get_ipython" in globals():
         opts = EasyDict({
             "input_files" : [
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/temp.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/vcwide/Data - Vulnerable Communities.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/temp.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Uottawa.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Ottawa.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
@@ -288,7 +298,7 @@ if __name__ == "__main__":
         args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
         opts = args.parse_args()
     
-    # with open("../../../../event.json", "r") as f:
+    # with open("../../event.json", "r") as f:
     #     data = EasyDict(yaml.safe_load(f))
     # gdrive_utils.set_creds_file("credentials.json")
     # gdrive_utils.set_partial_token_data(data.tokens)
@@ -300,3 +310,5 @@ if __name__ == "__main__":
     print("Upload:", updater.save_and_upload())
     toc = datetime.now()
     print("Total duration:", toc - tic)
+
+

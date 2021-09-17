@@ -188,6 +188,8 @@ class QPCRSites(object):
     def resolve_aliases(self, siteid):
         if isinstance(siteid, (pd.Series, pd.DataFrame)):
             return self.run_map(siteid, self.resolve_aliases)
+        if siteid is None:
+            return None
 
         lower_siteid = siteid.strip().lower()
         found_siteid = None
