@@ -500,6 +500,20 @@ class QPCRExtracter(object):
                 self.full_df = self.full_df.dropna(subset=cols)
 
             self.full_df[self.config.well_id_col] = self.full_df[self.config.well_id_col].apply(lambda x: str(x).upper())
+
+            def _valid_float(val):
+                """Check if a value can be cast to a float by Pandas. Note that None can
+                be cast (to nan). Strings can't be cast unless it is in the format of a float.
+                """
+                try:
+                    _ = pd.to_numeric(val)
+                    return True
+                except:
+                    return False
+
+            # Remove any Ct value that's not a number, and cast the remaining values to a float
+            keep_filt = self.full_df[self.config.ct_col].map(_valid_float)
+            self.full_df = self.full_df[keep_filt]
             self.full_df[self.config.ct_col] = pd.to_numeric(self.full_df[self.config.ct_col])
 
             # Do general string mappings based on config.string_mapper
@@ -772,9 +786,9 @@ if __name__ == "__main__":
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N2_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",                
 
                 # Sep 10
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N1 O 09.09 H 09.07 HD 09.08-09.09 AC 09.08 uO 09.09 4A 28 12A 28 20A 28 ST.pdf",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N2 O 09.09 H 09.07 HD 09.07-09 AC 09.08 uO 09.08-09.10  4A 28 12A 28 20A 28.pdf",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 Pep O H AC uO 4A C C 28.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N1 O 09.09 H 09.07 HD 09.08-09.09 AC 09.08 uO 09.09 4A 28 12A 28 20A 28 ST.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 N2 O 09.09 H 09.07 HD 09.07-09 AC 09.08 uO 09.08-09.10  4A 28 12A 28 20A 28.pdf",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/qPCR-2021-09-10 Pep O H AC uO 4A C C 28.pdf",
 
                 # Sep 7-10
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep07-10/qPCR-2021-09-07 N1 N2 Ottwa rerun.pdf",
@@ -810,6 +824,8 @@ if __name__ == "__main__":
 
                 # Tyson D3
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/Tyson/2021-05-06_B117 VARIANT_9 SAMPLES.pltd.pdf",
+
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/error-sep20/qPCR-2021-09-20 N1 O 09.17-09.19 VC 09.16_All Wells -  Quantification Cq Results.xlsx",
             ],
 
             "samples" : "<samples path here>",
@@ -818,7 +834,7 @@ if __name__ == "__main__":
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-sep10.xlsx",
+            "output_file" : "merged-error-sep20.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,
