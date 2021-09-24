@@ -272,16 +272,17 @@ if __name__ == "__main__":
     if "get_ipython" in globals():
         opts = EasyDict({
             "input_files" : [
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/vcwide/Data - Vulnerable Communities.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/Data - <unk>.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/temp.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Uottawa.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Ottawa.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
             ],
-            # "target_dir" : "gd://{site_parent_title}/",
-            "target_dir" : "gd://hidden_test/",
-            # "target_path_template" : "Data - {site_parent_title}.xlsx",
-            "target_path_template" : "Data - All - Wide Test.xlsx",
+            # "target_dir" : "gd://{parent_site_title}/",
+            # "target_dir" : "gd://hidden_test/",
+            "target_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/new/",
+            # "target_path_template" : "Data - {parent_site_title}.xlsx",
+            "target_path_template" : "Data - All - {parent_site_title}.xlsx",
             "config" : "qpcr_updater.yaml",
             "populator_config" : "qpcr_populator_ottawa.yaml",
             "sites_config" : "sites.yaml",
@@ -298,11 +299,11 @@ if __name__ == "__main__":
         args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
         opts = args.parse_args()
     
-    # with open("../../event.json", "r") as f:
-    #     data = EasyDict(yaml.safe_load(f))
-    # gdrive_utils.set_creds_file("credentials.json")
-    # gdrive_utils.set_partial_token_data(data.tokens)
-    # gdrive_utils.drive_set_root_id(data.parent_drive_folder)
+    with open("../../event.json", "r") as f:
+        data = EasyDict(yaml.safe_load(f))
+    gdrive_utils.set_creds_file("credentials.json")
+    gdrive_utils.set_partial_token_data(data.tokens)
+    gdrive_utils.drive_set_root_id(data.parent_drive_folder)
 
     tic = datetime.now()
     updater = QPCRUpdater(opts.config, opts.populator_config, sites_config=opts.sites_config, sites_file=opts.sites_file)

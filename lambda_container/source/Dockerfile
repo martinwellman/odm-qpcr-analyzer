@@ -14,8 +14,10 @@ RUN yum install -y nano
 # Variables do not persist between RUN commands, but files do, so save the locations to separate files.
 RUN echo $(python3 -c "import openpyxl, os; print(os.path.dirname(openpyxl.__file__));" 2> /dev/null) > OPENPYXL_DIR.txt
 RUN echo $(python3 -c "import ghostscript, os; print(os.path.dirname(ghostscript.__file__));" 2> /dev/null) > GHOSTSCRIPT_DIR.txt
+RUN echo $(python3 -c "import pycel, os; print(os.path.dirname(pycel.__file__));" 2> /dev/null) > PYCEL_DIR.txt
 RUN DIR=$(cat OPENPYXL_DIR.txt);    echo "OPENPYXL_DIR:     $DIR"
 RUN DIR=$(cat GHOSTSCRIPT_DIR.txt); echo "GHOSTSCRIPT_DIR:  $DIR"
+RUN DIR=$(cat PYCEL_DIR.txt);       echo "PYCEL_DIR:        $DIR"
 
 # Fixes for Python 3.8.10:
 # - openpyxl in /var/lang/lib/python3.8/site-packages/openpyxl/worksheet/_reader.py:
@@ -25,6 +27,9 @@ RUN DIR=$(cat GHOSTSCRIPT_DIR.txt); echo "GHOSTSCRIPT_DIR:  $DIR"
 #   Line 262 in init_with_args has incorrect argument types (strings not allowed, expects bytes/bytearrays)
 RUN DIR=$(cat OPENPYXL_DIR.txt); find "$DIR" -name _reader.py | xargs sed -i.bak 's/except ValueError/except/g'
 RUN DIR=$(cat GHOSTSCRIPT_DIR.txt); find "$DIR" -name _gsprint.py | xargs sed -i.bak 's/ArgArray(\*argv)/ArgArray(*[a.encode("UTF-8") for a in argv])/g'
+
+# Fix exception when trying to convert np.inf to int in Pycel
+RUN DIR=$(cat PYCEL_DIR.txt); find "$DIR" -name excelutil.py | xargs sed -i.bak "s/if is_number(value) and int(value) == float(value):/if is_number(value) and not np.isnan(value) and not np.isinf(value) and int(value) == float(value):/g"
 
 # Add support for saving both a formula string and a corresponding value of an Excel cell, by setting the calculated_value property
 # attached_data allows attaching Pandas data rows from the ODM to spreadsheet cells

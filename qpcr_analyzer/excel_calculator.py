@@ -1,4 +1,6 @@
 #%%
+# %load_ext autoreload
+# %autoreload 2
 """
 excel_calculator.py
 ===================
@@ -25,6 +27,7 @@ from openpyxl.cell.cell import Cell
 import inspect
 from pycel.excelformula import FormulaEvalError
 from openpyxl.utils import get_column_letter
+import openpyxl
 
 if 'calculated_value' not in Cell.__slots__:
     path = inspect.getfile(Cell)
@@ -56,8 +59,9 @@ def add_excel_calculated_values(xl, sheets=None):
         sheet = xl[sheet_name]
         for row_num in range(sheet.min_row, sheet.max_row+1):
             for cell in sheet[row_num]:
-                if cell.data_type == "f":
+                if cell.data_type == "f" and isinstance(cell.value, str) and cell.value.strip()[0:1] == '=':
                     addr = f"'{sheet_name}'!{cell.coordinate}"
+
                     try:
                         val = excel.evaluate(addr)
                         cell.calculated_value = val
@@ -65,7 +69,7 @@ def add_excel_calculated_values(xl, sheets=None):
                         cell.calculated_value = "#NAME?"
                     except FormulaEvalError as e:
                         pass
-                    except Exception as e:
+                    except e:
                         raise ValueError(f"ERROR evaluating Excel formula at {addr}: {cell.value}: {e}")
 
 @excel_helper()
@@ -99,10 +103,16 @@ def hyperlink(value, text):
 
 @excel_helper(ref_params=0)
 def address(row, col):
-    addr = "'Sheet1'!${}${}".format(get_column_letter(col), row)
+    addr = "${}${}".format(get_column_letter(col), row)
     return addr
 
 pycel.lib.stats.stdev = stdev
 pycel.lib.stats.rsq = rsq
 pycel.lib.lookup.hyperlink = hyperlink
 pycel.lib.lookup.address = address
+
+if __name__ == "__main__":
+    wb = openpyxl.load_workbook("/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/populated-sep10.xlsx")
+    add_excel_calculated_values(wb)
+    wb.save("/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/calc.xlsx")
+    print("Finished!")

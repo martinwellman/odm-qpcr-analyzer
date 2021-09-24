@@ -23,7 +23,7 @@ To install the QPCR Analyzer on your computer run the following commands:
     cd odm-qpcr-analyzer/qpcr_analyzer
     ./localfixes.sh
 
-The script [localfixes.sh](qpcr_analyzer/localfixes.sh) applies changes to both OpenPYXL and Ghostscript. These changes will affect your local copies of the OpenPYXL and Ghostscript packages, but should not affect behavior of other scripts that use these packages. If you would like to prevent these changes from affecting other scripts, set up a separate virtual environment for the QPCR Analyzer with a tool such as pyenv. In the future, these changes will be moved to a separate GitHub repository. For details on what [localfixes.sh](qpcr_analyzer/localfixes.sh) does, see [qpcr_analyzer/README.md](qpcr_analyzer/README.md).
+The script [localfixes.sh](qpcr_analyzer/localfixes.sh) applies changes to OpenPYXL, Ghostscript, and PyCel. These changes will affect your local copies of the OpenPYXL, Ghostscript, and PyCel packages, but should not affect behavior of other scripts that use these packages. If you would like to prevent these changes from affecting other scripts, set up a separate virtual environment for the QPCR Analyzer with a tool such as pyenv. In the future, these changes will be moved to a separate GitHub repository. For details on what [localfixes.sh](qpcr_analyzer/localfixes.sh) does, see [qpcr_analyzer/README.md](qpcr_analyzer/README.md).
 
 Install the [ODM-Import](https://github.com/jeandavidt/ODM-Import) repo (NOTE: This is temporarily set to the fork at [martinwellman/ODM-Import.git](https://github.com/martinwellman/ODM-Import.git), it will be changed back to jeandavidt/ODM-Import soon):
 

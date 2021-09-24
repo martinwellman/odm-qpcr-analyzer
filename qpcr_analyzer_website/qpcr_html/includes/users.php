@@ -28,7 +28,7 @@ $USER_DIR = USERS_ROOT . $USERNAME . "/";
 
 define("UPLOADS_ROOT",                              ROOT . "../qpcr_other/u/{$USERNAME}/uploads/");
 define("UPLOADS_TTL",                               60*60);  # In seconds
-define("QPCR_VERSION",                              ($USERNAME == "Martin" ? "0.1.35" : "0.1.35"));
+define("QPCR_VERSION",                              ($USERNAME == "Martin" ? "0.1.37" : "0.1.37"));
 define("OUTPUT_DEBUG",                              ($USERNAME == "Martin"));
 
 function check_logged_in() {

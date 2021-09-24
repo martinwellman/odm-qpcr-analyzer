@@ -825,7 +825,7 @@ if __name__ == "__main__":
                 # Tyson D3
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/Tyson/2021-05-06_B117 VARIANT_9 SAMPLES.pltd.pdf",
 
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/error-sep20/qPCR-2021-09-20 N1 O 09.17-09.19 VC 09.16_All Wells -  Quantification Cq Results.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
             ],
 
             "samples" : "<samples path here>",
@@ -834,7 +834,7 @@ if __name__ == "__main__":
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-error-sep20.xlsx",
+            "output_file" : "merged-test.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,

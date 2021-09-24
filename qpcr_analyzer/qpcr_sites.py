@@ -193,7 +193,7 @@ class QPCRSites(object):
 
         lower_siteid = siteid.strip().lower()
         found_siteid = None
-        matches = self.sites_df[self.config.columns.siteid.column].str.lower() == siteid
+        matches = self.sites_df[self.config.columns.siteid.column].str.lower() == lower_siteid
         if matches.sum() > 0:
             found_siteid = self.sites_df[self.config.columns.siteid.column][matches].iloc[0]
 

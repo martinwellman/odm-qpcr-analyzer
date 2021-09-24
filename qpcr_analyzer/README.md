@@ -12,9 +12,9 @@ In addition to the above, there are several other options that can be performed.
 
 ## Local Fixes and Changes
 
-There are a few changes that must be made to OpenPYXL and the Python Ghostscript packages. These changes should eventually be moved to the OpenPYXL and Ghostscript repos or to a fork of the repos.
+There are a few changes that must be made to the OpenPYXL, Python Ghostscript, and PyCel packages. These changes should eventually be moved to the OpenPYXL, Ghostscript, and PyCel repos or to a fork of the repos.
 
-In order to apply the fixes, edit [localfixes.sh](localfixes.sh), change the `ROOT` variable to your local Python site-packages folder (where your Python packages are stored), then run:
+In order to apply the fixes, run:
 
     ./localfixes.sh
 
@@ -31,6 +31,10 @@ The changes applied are described below.
 ### Local Fixes: Ghostscript
 
 1. The `ghostscript` package does not properly encode string parameters passed to the Ghostscript API (in ghostscript/_gsprint.py). This is only a problem in certain versions of Python (Python 3.8.10). The parameters must be properly encoded by calling each parameter's encode("UTF-8") members.
+
+### Local Fixes: PyCel
+
+1. `PyCel` raises an exception when coercing infinity and NaN to a number, which terminates evaluation of a cell. We modify the code to avoid this exception.
 
 ## Notes on BioRad Software Output
 

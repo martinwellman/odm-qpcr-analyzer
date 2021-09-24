@@ -47,6 +47,10 @@ CUSTOM_FUNCS = {
         "func" : "custom_func_quotify",
         "bind" : -20,
     },
+    "__UPPER" : {
+        "func" : "custom_func_upper",
+        "bind" : -21,
+    },
     "__SELECT" : {
         "func" : "custom_func_select",
         "bind" : -21,
@@ -341,6 +345,13 @@ def custom_func_select(populator, value_a, value_b, **kwargs):
     if value_a is None or value_a == "":
         return value_b
     return value_a
+
+def custom_func_upper(populator, value, **kwargs):
+    """Make text uppercase.
+    """
+    if isinstance(value, str):
+        value = value.upper()
+    return value
 
 def custom_func_quotify(populator, value, **kwargs):
     """Add quotes to the value.
