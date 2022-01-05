@@ -3,29 +3,22 @@ body {
 	display: block;
     margin: 0;
     padding: 0;
+    background: #f8f8ff;
+}
+
+.main-container {
+	padding: 10px 15px 30px 15px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+	background-color: #fff;
 	background-image: url('/images/odm-logo-15.png');
 	background-repeat: no-repeat;
 	background-position: -200px -200px;
 }
 
-
-
-.main-container, .select-user-container {
-	padding: 15px 25px 0 25px;
-}
-
-.select-user-container-inner {
-	margin: 20px;
-}
-
-.form-container {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-}
-
-.uploader-container-inner, .options-container-inner {
-	margin: 20px;
+.main-container > div {
+	padding: 15px 15px 0 15px;
 }
 
 .uploader-container {
@@ -42,6 +35,21 @@ body {
 	background-color:  #eee;
 	height: 1px;
 	margin: 9px 0;
+	display: block;
+}
+
+.space-tiny {
+	height: 2px;
+	display: block;
+}
+
+.space-small {
+	height: 5px;
+	display: block;
+}
+
+.space-medium {
+	height: 18px;
 	display: block;
 }
 
@@ -128,157 +136,90 @@ h1 {
 }
 
 .footer {
-    display:block;
-    text-align: right;
-    /* background: #eeeeff; */
-    margin: 20px 0 0 0;
-    padding: 10px 30px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+	font-size: 14px;
+	line-height: 20px;
+    background: #f8f8ff;
+	margin: 0px 0 0 0;
+    padding: 15px 15px;
+
+	border-top: 1px solid #dde; 
 }
 
-.target-container .processing-image {
-	width: 50px;
-	height: 50px;
-	vertical-align: middle;
-	padding: 0;
+.footer > div {
+	flex: 1;
+	padding: 0 15px;
+}
+
+.border-left {
+	border-left: 1px solid #dde; 
 }
 
 @media only screen and (max-width: 768px) {
-    .uploader-container, .options-container {
-        flex: 0 0 100%;
-        max-width: 100%;
-    }
+	.main-container {
+		flex-direction: column;
+	}
 }
 
 .disabled {
 	color: #ccc;
 }
 
+#drive-profile-image {
+	width: 50px; 
+	height: 50px; 
+	border-radius: 50%; 
+	position: absolute; 
+	right: 0;
+	pointer-events: none;
+	display: none;
+}
+
 #drive-folder-id {
 	width: 100%;
 }
 
-/*********************************************************************************************************
- Formstone Upload
-*********************************************************************************************************/
-
-.processing-message {
-    border: 3px dashed transparent;
-    background: rgba(0,0,0,0.2);
+.flex-break {
+	flex-basis: 100%;
+	height: 0;
 }
 
-.target-box {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    text-align: center;
-    
-    font-size: 14px;    
-    height:88px; 
-    line-height:80px; 
-    padding:0; 
-    margin:0;
-    
+.flex-general-margin {
+	flex: 0.5;
 }
 
-.fs-upload-target {
-    cursor : pointer;
+.flex-general-contents {
+	flex: 2.5;
+	max-width: 1200px;
 }
 
-.fs-upload-disabled .fs-upload-target, .no-touch .fs-upload-disabled:hover .fs-upload-target {
-    cursor : default;
-	cursor : not-allowed;
+.flex-1 {
+	flex: 1;
 }
 
-
-.fs-upload {
-    position : relative;
-	overflow : hidden;
+.flex-2 {
+	flex: 2;
 }
 
-.fs-upload, .fs-upload *, .fs-upload :after, .fs-upload :before, .fs-upload:after, .fs-upload:before {
-    -webkit-box-sizing : border-box;
-	box-sizing : border-box;
-	-webkit-transition : none;
-	transition : none;
-	-webkit-user-select : none!important;
-	-moz-user-select : none!important;
-	-ms-user-select : none!important;
-	user-select : none!important;
+.flex-3 {
+	flex: 3;
 }
 
-.fs-upload-input {
-    position : absolute;
-	top : 0;
-	right : 0;
-	bottom : 0;
-	left : 0;
-	z-index:-1px;
-	opacity : 0;
-	pointer-events : none;
+.form-row label {
+	display: block
 }
-
-.fs-upload-target {
-    cursor : pointer;
-}
-
-.fs-upload-disabled .fs-upload-target, .no-touch .fs-upload-disabled:hover .fs-upload-target {
-    cursor : default;
-	cursor : not-allowed;
-}
-
-.fs-upload.fs-light .fs-upload-target {
-    background : rgba(255,255,255,0.7);
-	border : 3px dashed #607d8b;
-	border-radius : 2px;
-	color : #455a64;
-	font-size : 14px;
-	margin : 0;
-	/* padding : 25px; */
-	text-align : center;
-	-webkit-transition : background .15s linear,border .15s linear,color .15s linear,opacity .15s linear;
-	transition : background .15s linear,border .15s linear,color .15s linear,opacity .15s linear;
-}
-
-.fs-light.fs-upload-dropping .fs-upload-target, .fs-light.fs-upload-focus .fs-upload-target, .no-touchevents .fs-light:hover .fs-upload-target {
-	background  : rgba(207, 216, 220, 0.7);
-	border-color : #546e7a;
-	color : #263238;
-}
-
-.fs-light.fs-upload-disabled {
-    opacity:.5;
-}
-
-.fs-light.fs-upload-disabled .fs-upload-target, .fs-light.fs-upload-disabled.fs-upload-dropping .fs-upload-target, .fs-light.fs-upload-disabled.fs-upload-focus .fs-upload-target, .no-touchevents .fs-light.fs-upload-disabled.fs-upload-dropping:hover .fs-upload-target, .no-touchevents .fs-light.fs-upload-disabled:hover .fs-upload-target {
-    background : #fff;
-	border-color : #607d8b;
-	color : #455a64;
-}
-
-/*********************************************************************************************************
- Upload file lists (queue, complete)
-*********************************************************************************************************/
-
-.filelists {
-	margin: 20px 0 0 0;
-}
-
-.filelists h5 {
-	margin: 10px 0 0;
-}
-
-.filelists_empty {
-	font-size: 12px;
-	margin: 10px 0 0 5px;
-	color: #aaa;
-}
-
-.filelists .analyzer_buttons {
-	padding-top: 5px;
+.form-row input[type=text], input[type=email], input[type=password] {
 	display: block;
+	width: 100%;
+}
+.errors {
+	color: #ff0000;
+	font-size: 12px;
 }
 
-.button {
+/* .button {
 	background: #678fe0;
 	border: 0;
 	color: #fff;
@@ -288,19 +229,91 @@ h1 {
 	font-size: 12px;
 	margin: 0 10px 0 0;
 	padding: 8px 12px;
-	/* text-transform: uppercase; */
 }
 
 .button:active {
 	background: #476fc0;
 }
 
-.settings-button {
-	margin: 5px 0 0 0;
+.button:disabled {
+	background: #aaaaaa;
+	color: #eeeeee;
+	cursor: default;
+}
+*/
+
+.button {
+	font-size: 12px;
+	margin: 0 3px 0 0;
+	padding: 0 10px;
+	height: 30px;
+	color: #000;
+	border-radius: 5px;
+	border: 1px solid #bbb;
+	background-color: #fffa;
+	display: inline-block;
+}
+
+.button:hover {
+	background-color: #eeea;
+}
+
+.button:active {
+	background-color: #ddda;
+}
+
+.button:disabled {
+	background-color: #ddd;
+	color: #999;
+	cursor: default;
+}
+
+.button-large {
+	font-size: 16px;
+	width: 150px;
+	height: 40px;
+	border-radius: 20px;
+	margin: 10px 10px 0 0;
+}
+
+.google-signin-button {
+	background-image: url("/images/google-signin/btn_google_signin_border_normal_web@2x.png");
+	background-size: cover;
+	background-repeat: no-repeat;
+	background-color: transparent;
+	color: transparent;
+	border: none;
+	height: 35px;
+	width: 145px;
+	margin: 0 1px 0 0;
+}
+
+.google-signin-button:hover {
+	background-color: transparent;
+	color: transparent;
+}
+
+.google-signin-button:focus {
+	background-image: url("/images/google-signin/btn_google_signin_border_focus_web@2x.png");
+	background-color: transparent;
+	color: transparent;
+}
+
+.google-signin-button:active {
+	background-image: url("/images/google-signin/btn_google_signin_border_pressed_web@2x.png");
+	background-color: transparent;
+	color: transparent;
+}
+
+.google-signin-button:disabled {
+	background-image: url("/images/google-signin/btn_google_signin_border_disabled_web@2x.png");
+	background-color: transparent;
+	color: transparent;
 }
 
 .settings-suboptions {
 	margin-left: 22px;
+	margin-top: 5px;
 }
 
 .settings-subgrouped {
@@ -309,107 +322,4 @@ h1 {
 	margin-left: 22px;
 	margin-top: 9px;
 }
-
-.button:disabled {
-	background: #aaaaaa;
-	color: #eeeeee;
-	cursor: default;
-}
-
-/* .filelists .disabled {
-	background: #aaaaaa;
-	color: #eeeeee;
-	cursor: default;
-} */
-
-.filelists .cancel_all {
-	color: red;
-	cursor: pointer;
-	clear: both;
-	display: inline-block;
-	font-size: 10px;
-	margin: 0;
-	text-transform: uppercase;
-}
-
-.filelist {
-	margin: 0;
-	padding: 10px 0;
-}
-
-.filelist li {
-	background: rgba(255, 255, 255, 0.5);
-	border-bottom: 1px solid #ECEFF1;
-	font-size: 14px;
-	list-style: none;
-	padding: 5px;
-	position: relative;
-}
-
-.filelist li:before {
-	display: none !important;
-}
-/* main site demos */
-
-.filelist li .bar {
-	background: rgba(190,190,235,0.4);
-	content: '';
-	height: 100%;
-	left: 0;
-	position: absolute;
-	top: 0;
-	width: 0;
-	z-index: 0;
-	-webkit-transition: width 0.1s linear;
-	transition: width 0.1s linear;
-}
-
-.filelist li .content {
-	display: block;
-	overflow: hidden;
-	position: relative;
-	z-index: 1;
-}
-
-.filelist li .file {
-	color: #455A64;
-	float: left;
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 95%;
-	white-space: nowrap;
-}
-
-.filelist li .progress {
-	color: #A0AEB5;
-	display: block;
-	float: right;
-	font-size: 10px;
-        margin: 1px 0 0 10px;
-	text-transform: uppercase;
-}
-
-.filelist li .cancel {
-	color: red;
-	cursor: pointer;
-	display: block;
-	float: right;
-	font-size: 10px;
-        margin: 1px 0 0 10px;
-	text-transform: uppercase;
-}
-
-.filelist li.error .file {
-	color: red;
-}
-
-.filelist li.error .progress {
-	color: red;
-}
-
-.filelist li.error .cancel {
-	display: none;
-}
-
 

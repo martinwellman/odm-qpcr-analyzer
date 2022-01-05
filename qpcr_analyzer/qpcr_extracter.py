@@ -300,8 +300,11 @@ class QPCRExtracter(object):
                 sample_id = re.sub(month, f"{month_num+1}.", sample_id, flags=re.IGNORECASE)
         sample_id = re.sub("\.\.", ".", sample_id)
 
-        # All number groups should be two digits (eg. 4 => 04)
+        # Number groups are preceded by a dot and trailed by a dot or end of string
+        # Add leading 0 to number groups that are 1 character long
         sample_id = re.sub("(?<=\.)([0-9])(?=\.|$)", "0\\1", sample_id)
+        # Reduce length of number groups down to last 2 digits if longer than 2 digits
+        sample_id = re.sub("(?<=\.)([0-9]*([0-9][0-9]))(?=\.|$)", "\\2", sample_id)
 
         # All letter groups should be preceded by an underscore (except for PS).
         sample_id = re.sub("\.(?=[A-Za-z])", "_", sample_id)
@@ -382,13 +385,15 @@ class QPCRExtracter(object):
             self.samples_df = self.samples_df.drop_duplicates(subset=match_col, keep="first")
 
             # Do any additional replacements of the sample IDs used for pairing between full_df and samples_df
-            for info in self.config.samples_excel.join_samples_id_pairing.full_df:
-                self.full_df[match_col] = self.full_df[match_col].apply(lambda x: re.sub(info.pattern, info.replace, x))
-            for info in self.config.samples_excel.join_samples_id_pairing.samples_df:
-                self.samples_df[match_col] = self.samples_df[match_col].apply(lambda x: re.sub(info.pattern, info.replace, x))
+            if "full_df" in self.config.samples_excel.join_samples_id_pairing:
+                for info in self.config.samples_excel.join_samples_id_pairing.full_df:
+                    self.full_df[match_col] = self.full_df[match_col].apply(lambda x: re.sub(info.pattern, info.replace, x))
+            if "samples_df" in self.config.samples_excel.join_samples_id_pairing:
+                for info in self.config.samples_excel.join_samples_id_pairing.samples_df:
+                    self.samples_df[match_col] = self.samples_df[match_col].apply(lambda x: re.sub(info.pattern, info.replace, x))
             
             self.full_df = self.full_df.join(self.samples_df[[samples_sample_id_col, match_col] + self.config.samples_excel.copy_samples_cols].set_index(match_col), on=match_col)
-                
+
             del self.full_df[match_col]
             del self.full_df[samples_sample_id_col]
             del self.samples_df[match_col]
@@ -406,9 +411,7 @@ class QPCRExtracter(object):
                     date = other_dates.iloc[0]
             self.full_df.loc[missing_dates, self.config.source_analysis_date_col] = date
         except Exception as e:
-            cols = [v[0] for v in self.config.samples_excel.copy_samples_cols_arr]
-            cols.append(self.config.samples_excel.sample_date_col_arr[0])
-            cols = list(dict.fromkeys(cols))
+            cols = self.config.samples_excel.copy_samples_cols
             file_name = os.path.basename(self.samples_file)
             raise QPCRError(json.dumps([f"Samples datasheet '{file_name}' is not in the correct format. Please ensure that the following columns are available:", cols]))
     
@@ -527,9 +530,9 @@ class QPCRExtracter(object):
             unknowns_filt = self.full_df[self.config.well_type_col].isin(self.config.well_type_unk)
             ntc_filt = self.full_df[self.config.well_type_col].isin(self.config.well_type_ntc)
 
-            standards_df = self.full_df[standards_filt]
-            unknowns_df = self.full_df[unknowns_filt]
-            ntc_df = self.full_df[ntc_filt]
+            # standards_df = self.full_df[standards_filt]
+            # unknowns_df = self.full_df[unknowns_filt]
+            # ntc_df = self.full_df[ntc_filt]
 
             std_ids = "_std_" + self.full_df.loc[standards_filt, self.config.sample_id_col].astype(str) + self.full_df.loc[standards_filt, self.config.sq_col].astype(str) + "_" + self.full_df.loc[standards_filt, self.config.target_col].astype(str).str.lower() + "_"
             self.full_df.loc[standards_filt, self.config.sample_id_col] = std_ids
@@ -617,25 +620,34 @@ class QPCRExtracter(object):
         """
         self.full_df[self.config.std_copies_col] = None
         std_filt = self.full_df[self.config.well_type_col].isin(self.config.well_type_std)
-        # Go through all genes
-        for gene_name in self.full_df[self.config.target_col].unique():
-            # Get the configured copies per well
-            if gene_name in self.config.std_copies_per_well:
-                copies_per_well = self.config.std_copies_per_well[gene_name]
-            else:
-                copies_per_well = self.config.std_copies_per_well["_default"]
-            
-            # Go through the sample IDs in order, assign the copies per well in order
-            cur_filt = std_filt & (self.full_df[self.config.target_col] == gene_name)
-            std_items = self.full_df.loc[cur_filt].sort_values(self.config.sq_col, ascending=False)
-            for idx, sample_id in enumerate(std_items[self.config.sample_id_col].unique()):
-                std_copies = None if idx >= len(copies_per_well) else copies_per_well[idx]
-                sample_filt = self.full_df[self.config.sample_id_col] == sample_id
-                # self.full_df.loc[cur_filt & sample_filt, self.config.sq_col] = sq
-                # self.full_df.loc[cur_filt & sample_filt, self.config.sq_mean_col] = sq
-                # self.full_df.loc[cur_filt & sample_filt, self.config.log_sq_col] = "" if sq is None else math.log10(sq)
-                # self.full_df.loc[cur_filt & sample_filt, self.config.sq_std_col] = 0
-                self.full_df.loc[cur_filt & sample_filt, self.config.std_copies_col] = std_copies
+
+        if self.config.get("std_copies_per_well", None) is None:
+            # If std_copies_per_well is not defined in config file then we do nothing and assume the user has properly
+            # entered the copies/well in the "Starting Quantity (SQ)" column
+            self.full_df.loc[std_filt, self.config.std_copies_col] = self.full_df.loc[std_filt, self.config.sq_col]
+        else:
+            # Go through all genes
+            for gene_name in self.full_df[self.config.target_col].unique():
+                cur_filt = std_filt & (self.full_df[self.config.target_col] == gene_name)
+                std_items = self.full_df.loc[cur_filt].sort_values(self.config.sq_col, ascending=False)
+
+                # Get the configured copies per well
+                if gene_name in self.config.std_copies_per_well:
+                    copies_per_well = self.config.std_copies_per_well[gene_name]
+                elif "_default" in self.config.std_copies_per_well:
+                    copies_per_well = self.config.std_copies_per_well["_default"]
+                else:
+                    # Copies/well for gene_name and "_default" not specified in config file, so use what is found
+                    # in the sq_col (ie. assume the user has entered it correctly)
+                    copies_per_well = np.array(std_items[self.config.sq_col].unique())
+                    copies_per_well.sort()
+                    copies_per_well = copies_per_well[::-1]
+                
+                # Go through the sample IDs in order, assign the copies per well in order
+                for idx, sample_id in enumerate(std_items[self.config.sample_id_col].unique()):
+                    std_copies = None if idx >= len(copies_per_well) else copies_per_well[idx]
+                    sample_filt = self.full_df[self.config.sample_id_col] == sample_id
+                    self.full_df.loc[cur_filt & sample_filt, self.config.std_copies_col] = std_copies
             
     def assign_instrument(self):
         """Assign the instrument name in the instrument_col column.
@@ -825,16 +837,41 @@ if __name__ == "__main__":
                 # Tyson D3
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/Tyson/2021-05-06_B117 VARIANT_9 SAMPLES.pltd.pdf",
 
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/aug19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
+
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep28/qPCR-2021-09-28 N1 O 09.27 H 09.23 AC 09.23-09.24 Vc 1 2 09.27 IL 1 2 09.27 repeat_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep28/qPCR-2021-09-28 N1 O 09.27 H 09.23-09.26 AC 09.23-09.24 VC 09.27 Split 09.27_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep28/qPCR-2021-09-28 N2 O 09.27 H 09.23-09.26 AC 09.23-09.24 VC 09.27 IL 09.27_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep28/qPCR-2021-09-28 pep IL 1 2 09.27 -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep28/qPCR-2021-09-28 pep O 09.27 H 09.23-09.26 AC 09.23-09.24 VC 09.27_All Wells -  Quantification Cq Results.xlsx",
+                
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep29/qPCR-2021-09-29 N1 O 09.28 HD 09.24-09.26 Aw 09.27 uO 09.28_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep29/qPCR-2021-09-29 N2 O 09.28 HD 09.24-09.26 Aw 09.27 UO 09.28_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep29/qPCR-2021-09-29 Pep O 09.28 HD 09.24-09.24 Aw 09.27 UO 09.28_All Wells -  Quantification Cq Results.xlsx",
+
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/nov2-error2/qPCR-2021-11-01 N1 N2 O 10.29-10.31 VC 10.28 Man vs RbQ-  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/nov2-error2/qPCR-2021-11-01 pep O 10.29-10.31 VC 10.28 ROB VS MAN_All Wells -  Quantification Cq Results.xlsx",
+
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/nov20-error/qPCR_2021-11-17 N1 N2 O 11.16 UO 11.16 AW 11.16Redo_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/nov20-error/qPCR-2021-11-17 Pep O 11.16 UO 11.16 Aw 11.16_All Well -  Quantification Cq Results.xlsx",        
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec1-error/qPCR-2021-11-30 N1 N1 O 11.29 H 11.25-28 VC 11.29 HD 11.26-28 REDO_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec1-error/qPCR-2021-11-30 N1 N2 redo H 11.25 VC211.29 HD 11.26-11.28  -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec1-error/qPCR-2021-11-30 PEPPER O 11.29 H 11.25-28 VC 11.29 HD 11.26-28_All Wells -  Quantification Cq Results.xlsx"
+
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 N2 O 12.21 UO 12.21 SV 12.21R_All Wells -  Quantification Cq Results.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 OMICRON O 12.21 UO 12.21 SV 12.21_All Wells -  Quantification Cq Results.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_N2_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_Pepper_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
             ],
 
             "samples" : "<samples path here>",
+            # "samples" : "/Users/martinwellman/Downloads/COVID SAMPLE LOG SHEET-2.xlsx",
             "sites_file" : "sites.xlsx",
             "sites_config" : "sites.yaml",
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-test.xlsx",
+            "output_file" : "merged-dec26.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,

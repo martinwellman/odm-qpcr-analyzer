@@ -4,35 +4,17 @@ error_reporting(E_ALL);
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 
+require_once "includes/utils.php";
 require 'vendor/autoload.php';
 require_once "includes/settings.php";
-require_once "includes/users.php";
-require_once "includes/awscreds.php";
 
 use Aws\S3\S3Client;
 use Aws\Lambda\LambdaClient;
 use Aws\Ses\SesClient;
 
-function clean_name($str) {
-    return preg_replace("/[^A-Za-z0-9_\\.\\- ]/i", "_", $str);
-}
-
-function get_param($key) {
-    if (ALLOW_POST && isset($_POST) && isset($_POST[$key]))
-        return $_POST[$key];
-    if (ALLOW_GET && isset($_GET) && isset($_GET[$key]))
-        return $_GET[$key];
-}
-
-function dir_size($dir) {
-    $size = 0;
-    $files = glob(rtrim($dir, "/") . "/*");
-    foreach ($files as $file) {
-        if (is_file($file)) $size += filesize($file);;
-        if (is_dir($file)) $size += dir_size($file);
-    }
-    return $size;
-}
+verify_requested_with();
+safe_session_start();
+$username = $_SESSION["username"];
 
 function handle_uploads() {
     /**
@@ -52,7 +34,7 @@ function handle_uploads() {
         @mkdir($data_dir, 0777, $recursive=true);
     }
 
-    $uploads_dir_size = dir_size(UPLOADS_ROOT) / (1024*1024);
+    $uploads_dir_size = dir_size(get_setting("CURRENT_USER_UPLOADS_ROOT")) / (1024*1024);
     $session_dir_size = dir_size($data_dir) / (1024*1024);
 
     $files = [$_FILES["file"]];
@@ -69,15 +51,17 @@ function handle_uploads() {
             $new_uploads_size = $uploads_dir_size + $cur_size;
 
             // Make sure we won't exceed our disk quota
-            if ($new_session_size > SESSION_DIR_MAXSIZE || $new_uploads_size > UPLOADS_DIR_MAXSIZE) {
-                $max_size = $new_session_size > SESSION_DIR_MAXSIZE ? 
-                    SESSION_DIR_MAXSIZE : 
-                    UPLOADS_DIR_MAXSIZE;
-                $msg = $new_session_size > SESSION_DIR_MAXSIZE ?
+            $session_dir_maxsize = get_setting("SESSION_DIR_MAXSIZE");
+            $uploads_dir_maxsize = get_setting("UPLOADS_DIR_MAXSIZE");
+            if ($new_session_size > $session_dir_maxsize || $new_uploads_size > $uploads_dir_maxsize) {
+                $max_size = $new_session_size > $session_dir_maxsize ? 
+                    $session_dir_maxsize : 
+                    $uploads_dir_maxsize;
+                $msg = $new_session_size > $session_dir_maxsize ?
                     "You have reached the maximum total upload size of" :
                     "The server has reached the maximum capacity of";
                 die(json_encode([
-                    "error" => $msg . " " . SESSION_DIR_MAXSIZE . " MB. No more files can be uploaded. Please contact " . CONTACT_EMAIL . " if you require assistance.",
+                    "error" => $msg . " " . $session_dir_maxsize . " MB. No more files can be uploaded. Please contact " . get_setting("CONTACT_EMAIL") . " if you require assistance.",
                     "short_error" => "Disk Space Error",
                     "full_abort" => true
                 ]));
@@ -94,12 +78,12 @@ function delete_old_data() {
      */
     global $sid;
 
-    if (is_dir(UPLOADS_ROOT)) {
-        $all_dirs = array_diff(scandir(UPLOADS_ROOT), array(".", ".."));
+    if (is_dir(get_setting("CURRENT_USER_UPLOADS_ROOT"))) {
+        $all_dirs = array_diff(scandir(get_setting("CURRENT_USER_UPLOADS_ROOT")), array(".", ".."));
         foreach ($all_dirs as $dir) {
             if ($dir == $sid)
                 continue;
-            delete_data_with_sid($dir, UPLOADS_TTL);
+            delete_data_with_sid($dir, get_setting("UPLOADS_TTL"));
         }
     }
 }
@@ -108,7 +92,7 @@ function delete_data_with_sid($dataid, $ttl=NULL) {
     /**
      * Delete the data for the session ID $dataid, for the current user.
      */
-    $path = UPLOADS_ROOT . $dataid;
+    $path = get_setting("CURRENT_USER_UPLOADS_ROOT") . $dataid;
     if (is_dir($path)) {
         $age = time() - filemtime($path);
         if ($ttl === NULL || $age > $ttl) {
@@ -126,14 +110,16 @@ function delete_current_data() {
      * Delete all the data (uploads) for the current session.
      */
     global $data_dir;
-    $all_files = array_diff(scandir($data_dir), array(".", ".."));
-    foreach ($all_files as $file) {
-        $cur_file = $data_dir . $file;
-        if (is_file($cur_file)) {
-            unlink($cur_file);
+    if (is_dir($data_dir)) {
+        $all_files = array_diff(scandir($data_dir), array(".", ".."));
+        foreach ($all_files as $file) {
+            $cur_file = $data_dir . $file;
+            if (is_file($cur_file)) {
+                unlink($cur_file);
+            }
         }
+        rmdir($data_dir);
     }
-    rmdir($data_dir);
 }
 
 function upload_file($file) {
@@ -151,25 +137,18 @@ function upload_file($file) {
      */
     global $sid;
 
-    $s3 = new S3Client([
-        "region" => AWS_REGION,
-        "version" => "latest",
-        "credentials" => [
-            "key" => AWS_KEY,
-            "secret" => AWS_SECRET
-        ]
-    ]);
+    $s3 = new S3Client(get_aws_creds());
 
     $key = basename($file);
-    $key = S3_INPUTS_ROOT . $sid . "/" . $key;
+    $key = get_setting("S3_INPUTS_ROOT") . $sid . "/" . $key;
 
     $result = $s3->putObject([
-        "Bucket" => S3_BUCKET,
+        "Bucket" => get_setting("S3_BUCKET"),
         "Key" => $key,
         "SourceFile" => $file
     ]);
 
-    return "s3://" . S3_BUCKET . "/" . $key;
+    return "s3://" . get_setting("S3_BUCKET") . "/" . $key;
 }
 
 function get_domain($email) {
@@ -202,20 +181,19 @@ function verify_emails($emails, $die_if_unverified=False) {
     $identities = [];
     foreach ($emails as $email) {
         array_push($identities, $email);
-        // Add the domain
+        // Add the domain, so we can retrieve domain verification status as well as email verification status
         $domain = get_domain($email);
         if ($domain)
             array_push($identities, $domain);
     }
 
-    $ses = new SesClient([
-        "region" => AWS_REGION,
-        "version" => "latest",
-        "credentials" => [
-            "key" => AWS_KEY,
-            "secret" => AWS_SECRET
-        ]
-    ]);
+    if (get_setting("ALLOW_ALL_EMAILS"))
+        return [
+            "verified" => $emails,
+            "unverified" => []
+        ];
+
+    $ses = new SesClient(get_aws_creds());
     $result = $ses->getIdentityVerificationAttributes([
         "Identities" => $identities
     ]);
@@ -230,8 +208,9 @@ function verify_emails($emails, $die_if_unverified=False) {
         $entry = NULL;
         $domain = get_domain($email);
 
-        if (ALLOWABLE_EMAILS && count(ALLOWABLE_EMAILS) > 0) {
-            if (!in_array($email, ALLOWABLE_EMAILS) && !in_array($domain, ALLOWABLE_EMAILS)) {
+        $allowable_emails = get_setting("ALLOWABLE_EMAILS");
+        if ($allowable_emails && count($allowable_emails) > 0) {
+            if (!in_array($email, $allowable_emails) && !in_array($domain, $allowable_emails)) {
                 array_push($unverified, $email);
                 continue;
             }
@@ -257,7 +236,7 @@ function verify_emails($emails, $die_if_unverified=False) {
         if (count($unverified) > 0) {
             $message = "The analyzer was not started because the following email addresses have not been verified:\n\n";
             $message = $message . make_bullet_list($unverified);
-            $message = $message . "\n\nPlease remove the unverified addresses from the list of recipients, or contact " . CONTACT_EMAIL . " to get them verified.";
+            $message = $message . "\n\nPlease remove the unverified addresses from the list of recipients, or contact " . get_setting("CONTACT_EMAIL") . " to get them verified.";
             die(json_encode(["error" => $message]));
         }
     }
@@ -272,9 +251,9 @@ function run_analyzer() {
     /**
      * Run the Lambda function with the currently uploaded files and settings.
      */
-    global $data_dir, $USERNAME;
+    global $data_dir, $sid;
 
-    $tokens = get_saved_tokens();
+    $tokens = json_decode(get_user_data(get_loggedin_user(), "google_tokens"));
 
     $to_emails = get_param("to_emails");
     if (!$to_emails || count($to_emails) == 0) {
@@ -295,8 +274,9 @@ function run_analyzer() {
     $output_format = get_param("output_format");
     $output_format_description = OUTPUT_FORMATS[$output_format]["description"];
 
-    $parent_drive_folder = get_setting("drive.parent");
-    if (!$parent_drive_folder) $parent_drive_folder = "";
+    $parent_drive_folder = get_user_data(get_loggedin_user(), "gdrive_parent");
+    if (!$parent_drive_folder)
+        $parent_drive_folder = "";
     $parent_drive_folder = trim($parent_drive_folder);
 
     if ($update_remote && $parent_drive_folder == "") {
@@ -320,68 +300,64 @@ function run_analyzer() {
     }
     delete_current_data();
 
-    $userInfo = get_gdrive_user_info();
+    $userInfo = json_decode(get_user_data(get_loggedin_user(), "google_userinfo"));
     $descriptive_settings = [
-        "User: " . $USERNAME,
+        "User: " . get_loggedin_user(),
         "Split by site: " . ($split_by_site ? "Yes" : "No"),
         "Output format: {$output_format_description}",
         "Update on Google Drive: " . ($update_remote ? "Yes ({$userInfo->email})" : "No"),
         "Parent Google Drive folder: " . ($update_remote ? $parent_drive_folder : "Not Used"),
-        "Lambda version: " . QPCR_VERSION,
+        "Session ID: " . $sid,
+        "Lambda version: " . get_setting("QPCR_VERSION"),
     ];
 
-    $lambda = new LambdaClient([
-        "region" => AWS_REGION,
-        "version" => "latest",
-        "credentials" => [
-            "key" => AWS_KEY,
-            "secret" => AWS_SECRET
-        ]
-        ]);
+    $lambda = new LambdaClient(get_aws_creds());
 
-    $function_name = LAMBDA_FUNCTION . ":" . preg_replace("/[^A-Za-z0-9_-]/", "_", QPCR_VERSION);
-    // $function_name = LAMBDA_FUNCTION;
+    $function_name = get_setting("LAMBDA_FUNCTION") . ":" . preg_replace("/[^A-Za-z0-9_-]/", "_", get_setting("QPCR_VERSION"));
+
+    // $function_name = get_setting("LAMBDA_FUNCTION");
     $result = $lambda->invoke([
         "FunctionName" => $function_name,
         "InvocationType" => "Event",
+        
         "Payload" => json_encode([
             "inputs" => $uploaded_files,
-            "from_email" => LAMBDA_FROM_EMAIL,
+            "from_email" => get_setting("LAMBDA_FROM_NAME_AND_EMAIL"),
             "to_emails" => $to_emails,
-            "username" => $USERNAME,
-            "samples" => LAMBDA_SAMPLES,
-            "sites_file" => LAMBDA_SITES_FILE,
-            "sites_config" => LAMBDA_SITES_CONFIG,
-            "extracter_config" => LAMBDA_EXTRACTER_CONFIG,
+            "username" => get_loggedin_user(),
+            "samples" => get_setting("LAMBDA_SAMPLES"),
+            "sites_file" => get_setting("LAMBDA_SITES_FILE"),
+            "sites_config" => get_setting("LAMBDA_SITES_CONFIG"),
+            "extracter_config" => get_setting("LAMBDA_EXTRACTER_CONFIG"),
             "output_format" => $output_format,
             "output_format_description" => $output_format_description,
-            "qaqc_config" => OUTPUT_FORMATS[$output_format]["qaqc_config"],
-            "populator_config" => OUTPUT_FORMATS[$output_format]["populator_config"],
-            "updater_config" => OUTPUT_FORMATS[$output_format]["updater_config"],
-            "mapper_config" => LAMBDA_MAPPER_CONFIG,
-            "mapper_map" => LAMBDA_MAPPER_MAP,
-            "populator_template" => OUTPUT_FORMATS[$output_format]["populator_template"],
-            "output_path" => LAMBDA_OUTPUT_PATH,
+            "qaqc_config" => get_setting(OUTPUT_FORMATS[$output_format]["qaqc_config"]),
+            "populator_config" => get_setting(OUTPUT_FORMATS[$output_format]["populator_config"]),
+            "updater_config" => get_setting(OUTPUT_FORMATS[$output_format]["updater_config"]),
+            "mapper_config" => get_setting("LAMBDA_MAPPER_CONFIG"),
+            "mapper_map" => get_setting("LAMBDA_MAPPER_MAP"),
+            "populator_template" => get_setting(OUTPUT_FORMATS[$output_format]["populator_template"]),
+            "output_path" => get_setting("LAMBDA_OUTPUT_PATH"),
             "split_by_site" => $split_by_site,
             "tokens" => $tokens ? json_encode($tokens) : "",
-            "remote_target" => $update_remote ? OUTPUT_FORMATS[$output_format]["lambda_remote_target"] : "",
-            "populated_output_file" => $split_by_site ? LAMBDA_POPULATED_OUTPUT_FILE_SPLIT : LAMBDA_POPULATED_OUTPUT_FILE_ALL,
+            "remote_target" => $update_remote ? get_setting(OUTPUT_FORMATS[$output_format]["lambda_remote_target"]) : "",
+            "populated_output_file" => $split_by_site ? get_setting("LAMBDA_POPULATED_OUTPUT_FILE_SPLIT") : get_setting("LAMBDA_POPULATED_OUTPUT_FILE_ALL"),
             "descriptive_settings" => $descriptive_settings,
             "parent_drive_folder" => $parent_drive_folder,
             "hide_qaqc" => false,
-            "output_debug" => OUTPUT_DEBUG,
+            "output_debug" => get_setting("OUTPUT_DEBUG"),
         ])
         ]);
         
     $recipients = make_bullet_list($to_emails);
     if ($recipients) {
-        $recipients = "\n\nThe following recipients will receive the report:\n\n" . $recipients;
+        $recipients = " The following recipients will receive the report:\n\n" . $recipients;
     }
     // $files_msg = make_bullet_list($uploaded_file_names);
     // if ($files_msg) {
     //     $files_msg = "\n\nThe following files have been uploaded:\n\n" . $files_msg;
     // }
-    die(json_encode(["message" => "Analyzer started, this can take up to 10 minutes for 15 PDF files." . $recipients]));
+    die(json_encode(["message" => "Analyzer started." . $recipients]));
 }
 
 function make_bullet_list($list) {
@@ -397,31 +373,127 @@ function make_bullet_list($list) {
     return $txt;
 }
 
-$action = get_param("action");
-if (!$action) {
-    die("Error: No Action");
+function drive_revoke() {
+    $tokens = json_decode(get_user_data(NULL, "google_tokens"));
+    $token = $tokens->token;
+    $refresh_token = $tokens->refresh_token;
+
+    $client = google_drive_client();
+    $client->revokeToken($token);
+    $client->revokeToken($refresh_token);
+
+    update_user(get_loggedin_user(), [
+        "google_tokens" => NULL,
+        "google_userinfo" => NULL
+    ]);
+}
+
+function google_drive_client() {
+    $client = new Google\Client();
+    $client->setAuthConfig(get_setting("GOOGLE_CLIENT_SECRET_FILE"));
+    // $client->setScopes([get_setting("GOOGLE_DRIVE_SCOPE"), "profile", "email"]);
+    // $client->setRedirectUri(get_protocol_and_domain());
+    return $client;
+}
+
+function drive_register() {
+    // $authCode = file_get_contents("php://input");
+    $authCode = get_param("authCode");
+
+    # Exchange auth code for access token and refresh token
+    $client = new Google\Client();
+    $client->setAuthConfig(get_setting("GOOGLE_CLIENT_SECRET_FILE"));
+    $client->setScopes([get_setting("GOOGLE_DRIVE_SCOPE"), "profile", "email"]);
+    $client->setRedirectUri(get_protocol_and_domain());
+    $creds = $client->fetchAccessTokenWithAuthCode($authCode);
+    
+    if (!$creds) {
+        die(json_encode(["error" => "Could not retrieve credentials."]));
+    }
+    
+    if (!isset($creds["access_token"]) || !isset($creds["refresh_token"])) {
+        die(json_encode(["error" => "Could not retrieve access and refresh tokens."]));
+    }
+    
+    if (!isset($creds["scope"])) {
+        die(json_encode(["error" => "No access provided by user."]));
+    }
+    
+    $scopes = explode(" ", $creds["scope"]);
+    if (!in_array(get_setting("GOOGLE_DRIVE_SCOPE"), $scopes)) {
+        die(json_encode(["error" => "You must allow access to Google Drive. Please try again and be sure to select the checkbox next to 'See, edit, create, and delete all of your Google Drive files'."]));
+    }
+    
+    $tokens = [
+        "token" => $creds["access_token"],
+        "refresh_token" => $creds["refresh_token"],
+        "scopes" => $scopes,
+        "expiry" => gmdate("Y-m-d\TH:i:s\Z", $creds["created"] + $creds["expires_in"]),
+    ];
+    
+    # Get and save user info (email, name, etc)
+    $service = new Google\Service\Oauth2($client);
+    $userInfo = $service->userinfo->get();
+    $userInfo = [
+        "email" => isset($userInfo["email"]) ? $userInfo["email"] : NULL,
+        "name" => isset($userInfo["name"]) ? $userInfo["name"] : NULL,
+        "picture" => isset($userInfo["picture"]) ? $userInfo["picture"] : NULL
+    ];
+
+    update_user(get_loggedin_user(), [
+        "google_tokens" => json_encode($tokens),
+        "google_userinfo" => json_encode($userInfo)
+    ]);
+    
+    die(json_encode([
+        "email" => $userInfo["email"],
+        "name" => $userInfo["name"],
+        "picture" => $userInfo["picture"],
+    ]));    
 }
 
 $sid = clean_name(get_param("sid"));
 if (!$sid) {
     die("Error: No Session ID");
 }
-$data_dir = UPLOADS_ROOT . $sid . DIRECTORY_SEPARATOR;
 
-if ($action == "uploadFile") {
-    check_logged_in();
+$data_dir = get_setting("CURRENT_USER_UPLOADS_ROOT") . $sid . DIRECTORY_SEPARATOR;
+
+$action = get_param("action");
+if (!$action) {
+    die("Error: No Action");
+}
+
+verify_recaptcha($action, true);
+
+if ($action == ACTION_QPCR_UPLOAD_FILE) {
+    assert_logged_in_and_verified();
     delete_old_data();
     handle_uploads();
-} elseif ($action == "runAnalyzer") {
-    check_logged_in();
+} elseif ($action == ACTION_QPCR_RUN_ANALYZER) {
+    assert_logged_in_and_verified();
     run_analyzer();
-} elseif ($action == "deleteCurrentData") {
-    check_logged_in();
+} elseif ($action == ACTION_QPCR_DELETE_CURRENT_DATA) {
+    assert_logged_in_and_verified();
     delete_current_data();
-} elseif ($action == "updateSettings") {
-    check_logged_in();
-    $new_settings = get_param("settings");
-    update_settings($new_settings);
+} elseif ($action == ACTION_QPCR_UPDATE_GOOGLE_DRIVE_PARENT) {
+    assert_logged_in_and_verified();
+    $parent = get_param("parent");
+    update_user(get_loggedin_user(), [
+        "gdrive_parent" => $parent
+    ]);
+} elseif ($action == ACTION_QPCR_UPDATE_DEFAULT_RECIPIENTS) {
+    assert_logged_in_and_verified();
+    $recipients = get_param("recipients");
+    update_user(get_loggedin_user(), [
+        "default_recipients" => is_array($recipients) ? implode(",", $recipients) : NULL
+    ]);
+} elseif ($action == ACTION_QPCR_DRIVE_REGISTER) {
+    assert_logged_in_and_verified();
+    drive_register();
+} elseif ($action == ACTION_QPCR_CLEAR_GOOGLE_DRIVE) {
+    assert_logged_in_and_verified();
+    drive_revoke();
 } else {
     die("Error: Unrecognized action " . $action);
 }

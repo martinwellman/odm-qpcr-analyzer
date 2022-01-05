@@ -47,14 +47,16 @@ class QPCRSites(object):
             for c in self.config.columns.values():
                 if c.get("make_lower", False):
                     self.sites_df[c.column] = self.sites_df[c.column].str.lower()
+                elif c.get("make_upper", False):
+                    self.sites_df[c.column] = self.sites_df[c.column].str.upper()
 
     def get_siteid(self, siteid):
         """Get the valid siteid. If siteid is not recognized then None is returned. Site ID aliases will also be mapped to the actual site ID.
         """
         return self.resolve_aliases(siteid)
 
-    def get_site_title(self, siteid):
-        return self.get_site_info(siteid, self.config.columns.site_title.column)
+    def get_site_title(self, siteid, default=None):
+        return self.get_site_info(siteid, self.config.columns.site_title.column, default=default)
 
     # def get_siteids_with_shared_parentid(self, siteid):
     #     """Get all site IDs, as a list, that share the parent of the specified siteid.
@@ -103,20 +105,23 @@ class QPCRSites(object):
         aliases = self.get_site_info(siteid, self.config.columns.siteid_aliases.column)
         return [a.strip() for a in aliases.split(",")]
 
-    def get_site_parentid(self, siteid):
-        return self.get_site_info(siteid, self.config.columns.parentid.column)
+    def get_site_parentid(self, siteid, default=None):
+        return self.get_site_info(siteid, self.config.columns.parentid.column, default=default)
 
-    def get_site_parent_title(self, siteid):
-        return self.get_site_info(siteid, self.config.columns.parent_title.column)
+    def get_site_parent_title(self, siteid, default=None):
+        return self.get_site_info(siteid, self.config.columns.parent_title.column, default=default)
 
-    def get_site_sample_type(self, siteid):
-        return self.get_site_info(siteid, self.config.columns.sample_type.column)
+    def get_site_sample_type(self, siteid, default=None):
+        return self.get_site_info(siteid, self.config.columns.sample_type.column, default=default)
 
-    def get_sample_siteid(self, sample_id):
-        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.siteid.column)
+    def get_site_file_id(self, siteid, default=None):
+        return self.get_site_info(siteid, self.config.columns.fileid.column, default=default)
 
-    def get_sample_site_title(self, sample_id):
-        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.site_title.column)
+    def get_sample_siteid(self, sample_id, default=None):
+        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.siteid.column, default=default)
+
+    def get_sample_site_title(self, sample_id, default=None):
+        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.site_title.column, default=default)
 
     def get_sample_siteid_aliases(self, sample_id):
         if isinstance(sample_id, (pd.Series, pd.DataFrame)):
@@ -132,14 +137,14 @@ class QPCRSites(object):
         """
         return self.config.unknown_siteid
 
-    def get_sample_parentid(self, sample_id):
-        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.parentid.column)
+    def get_sample_parentid(self, sample_id, default=None):
+        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.parentid.column, default=default)
 
-    def get_sample_parent_title(self, sample_id):
-        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.parent_title.column)
+    def get_sample_parent_title(self, sample_id, default=None):
+        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.parent_title.column, default=default)
 
-    def get_sample_sample_type(self, sample_id):
-        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.sample_type.column)
+    def get_sample_sample_type(self, sample_id, default=None):
+        return self.get_site_info(self.get_siteid_from_sampleid(sample_id), self.config.columns.sample_type.column, default=default)
 
     def get_type_description(self, sample_type):
         """Get a description of the ODM sample type (eg. "rawWW" -> "Raw wastewater")
@@ -181,8 +186,10 @@ class QPCRSites(object):
         if len(comps) == 0:
             return None
         siteid = comps[0].strip()
-        if self.config.columns.siteid.make_lower:
+        if self.config.columns.siteid.get("make_lower", False):
             siteid = siteid.lower()
+        elif self.config.columns.siteid.get("make_upper", False):
+            siteid = siteid.upper()
         return siteid
 
     def resolve_aliases(self, siteid):
@@ -208,8 +215,10 @@ class QPCRSites(object):
                     found_siteid = cur_siteid
                 if found_siteid:
                     break
-        if found_siteid and self.config.columns.siteid.make_lower:
+        if found_siteid and self.config.columns.siteid.get("make_lower", False):
             found_siteid = found_siteid.lower()
+        elif found_siteid and self.config.columns.siteid.get("make_upper", False):
+            found_siteid = found_siteid.upper()
         return found_siteid
 
     def get_site_info(self, siteid, retrieve_col=None, default=None):
@@ -246,6 +255,7 @@ class QPCRSites(object):
             return default
         match = match.iloc[0]
         if retrieve_col is None:
+            # Return all columns
             return match
         match = match[retrieve_col]
         if isinstance(match, str):
@@ -346,7 +356,7 @@ class QPCRSites(object):
     def group_by_file_template(self, df, siteid_col, file_template, intersection_filter=None, always_include_filter=None):
         """Group a DataFrame based on what the output path for the sample would be after parsing the tags in file_template
         for each DataFrame row. The file_template is based on the site ID of the row, and includes the tags {site_id}, 
-        {site_title}, {parent_site_id}, {parent_site_title}, and {sample_type}.
+        {site_title}, {parent_site_id}, {parent_site_title}, {file_id} and {sample_type}.
 
         Parameters
         ----------
@@ -356,7 +366,7 @@ class QPCRSites(object):
             The column in the df that contains the site IDs.
         file_template : str
             The path/filename template that determines where to save output to. It can have the tags {site_id}, {site_title}, 
-            {parent_site_id}, {parent_site_title}, and {sample_type}. We determine the output file name for each sample in df, and we group
+            {parent_site_id}, {parent_site_title}, {file_id} and {sample_type}. We determine the output file name for each sample in df, and we group
             all samples with the same output filename together.
         intersection_filter : pd.Series | pd.DataFrame
             A filter into df specifying which items in df to group. All other items are ignored for grouping purposes.
@@ -376,18 +386,24 @@ class QPCRSites(object):
         parent_site_id_column = "______parent_site_id______"
         parent_site_title_column = "______parent_site_title______"
         sample_type_column = "______sample_type______"
+        file_id_column = "______file_id______"
         file_column = "______filename______"
 
         def _make_filename(row):
-            return parse_values(file_template, site_id=cleanup_file_name(row[site_id_column]), site_title=cleanup_file_name(row[site_title_column]), parent_site_id=cleanup_file_name(row[parent_site_id_column]), parent_site_title=cleanup_file_name(row[parent_site_title_column]), sample_type=cleanup_file_name(row[sample_type_column]))[0]
+            return parse_values(file_template, site_id=cleanup_file_name(row[site_id_column]), site_title=cleanup_file_name(row[site_title_column]), parent_site_id=cleanup_file_name(row[parent_site_id_column]), parent_site_title=cleanup_file_name(row[parent_site_title_column]), file_id=cleanup_file_name(row[file_id_column]), sample_type=cleanup_file_name(row[sample_type_column]))[0]
 
         grouper_df = df[[siteid_col]].copy()
         grouper_df[site_id_column] = self.get_siteid(grouper_df[siteid_col]).fillna(self.config.unknown_siteid)
-        grouper_df[site_title_column] = self.get_site_title(grouper_df[siteid_col]).fillna(self.config.unknown_site_title)
-        grouper_df[parent_site_id_column] = self.get_site_parentid(grouper_df[siteid_col]).fillna(self.config.unknown_parentid)
-        grouper_df[parent_site_title_column] = self.get_site_parent_title(grouper_df[siteid_col]).fillna(self.config.unknown_parent_site_title)
-        grouper_df[sample_type_column] = self.get_site_sample_type(grouper_df[siteid_col]).fillna(self.config.unknown_sample_type)
-        grouper_df[file_column] = grouper_df[[site_id_column, site_title_column, parent_site_id_column, parent_site_title_column, sample_type_column]].agg(_make_filename, axis=1)
+        # grouper_df[site_title_column] = self.get_site_title(grouper_df[siteid_col]).fillna(slf.config.unknown_siete_title)
+        # grouper_df[parent_site_id_column] = self.get_site_parentid(grouper_df[siteid_col]).fillna(self.config.unknown_parentid)
+        # grouper_df[parent_site_title_column] = self.get_site_parent_title(grouper_df[siteid_col]).fillna(self.config.unknown_parent_site_title)
+        # grouper_df[sample_type_column] = self.get_site_sample_type(grouper_df[siteid_col]).fillna(self.config.unknown_sample_type)
+        # grouper_df[file_id_column] = self.get_site_file_id(grouper_df[siteid_col])
+        # no_file_id_filt = (grouper_df[file_id_column] == "") | pd.isna(grouper_df[file_id_column])
+        # grouper_df.loc[no_file_id_filt, file_id_column] = grouper_df.loc[no_file_id_filt, site_id_column]
+        
+        # grouper_df[file_column] = grouper_df[[site_id_column, site_title_column, parent_site_id_column, parent_site_title_column, file_id_column, sample_type_column]].agg(_make_filename, axis=1)
+        grouper_df[file_column] = grouper_df[site_id_column].map(lambda siteid: self.parse_filename_for_siteid(file_template, siteid))
 
         groups = []
         for file_name, file_group in grouper_df.groupby(file_column):
@@ -400,13 +416,14 @@ class QPCRSites(object):
             if always_include_filter is not None:
                 filt = filt | always_include_filter
             
+            siteid = file_group[site_id_column]
             groups.append(({
                 "fileName" : file_group[file_column].iloc[0],
-                "siteID" : file_group[site_id_column].iloc[0],
-                "siteTitle" : file_group[site_title_column].iloc[0],
-                "parentSiteID" : file_group[parent_site_id_column].iloc[0],
-                "parentSiteTitle" : file_group[parent_site_title_column].iloc[0],
-                "sampleType" : file_group[sample_type_column].iloc[0],
+                "siteID" : siteid,
+                "siteTitle" : self.get_site_title(siteid, default=self.config.unknown_site_title), #file_group[site_title_column].iloc[0],
+                "parentSiteID" : self.get_site_parentid(siteid, default=self.config.unknown_parentid), #file_group[parent_site_id_column].iloc[0],
+                "parentSiteTitle" : self.get_site_parent_title(siteid, default=self.config.unknown_parent_site_title), #file_group[parent_site_title_column].iloc[0],
+                "sampleType" : self.get_site_sample_type(siteid, default=self.config.unknown_sample_type), #file_group[sample_type_column].iloc[0],
             }, df[filt]))
         
         return groups
@@ -418,21 +435,23 @@ class QPCRSites(object):
         site_id = self.get_siteid(siteid)
         if site_id is None:
             site_id = self.config.unknown_siteid
-        site_title = self.get_site_title(siteid)
-        if site_title is None:
-            site_title = self.config.unknown_site_title
-        parent_site_id = self.get_site_parentid(siteid)
-        if parent_site_id is None:
-            parent_site_id = self.config.unknown_parentid
-        parent_site_title = self.get_site_parent_title(siteid)
-        if parent_site_title is None:
-            parent_site_title = self.config.unknown_parent_site_title
+        site_title = self.get_site_title(siteid, default=self.config.unknown_site_title)
+        parent_site_id = self.get_site_parentid(siteid, default=self.config.unknown_parentid)
+        parent_site_title = self.get_site_parent_title(siteid, default=self.config.unknown_parent_site_title)
+        file_id = self.get_site_file_id(siteid)
+        if pd.isna(file_id):
+            file_id = site_id
+            if self.config.columns.fileid.get("make_lower", False):
+                file_id = file_id.lower()
+            elif self.config.columns.fileid.get("make_upper", False):
+                file_id = file_id.upper()
         return parse_values(
             file_template, 
             site_id=cleanup_file_name(site_id), 
             site_title=cleanup_file_name(site_title), 
             parent_site_id=cleanup_file_name(parent_site_id), 
-            parent_site_title=cleanup_file_name(parent_site_title)
+            parent_site_title=cleanup_file_name(parent_site_title),
+            file_id=cleanup_file_name(file_id)
             )[0]
 
         # for parent_id, parent_group in self.sites_df.groupby(self.config.columns.parentid.column):

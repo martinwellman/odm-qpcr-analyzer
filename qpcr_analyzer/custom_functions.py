@@ -14,6 +14,8 @@ import re
 from openpyxl.utils import get_column_letter
 from openpyxl.formula.translate import Translator
 from openpyxl.utils.cell import coordinate_from_string
+import math
+import numbers
 
 from qpcr_utils import (
     add_sheet_name_to_colrow_name,
@@ -169,7 +171,7 @@ def custom_func_getrange(populator, row_name, col_name, max_items=None, template
         max_items = int(max_items)
     return populator.get_named_range(target_sheet_name, row_name, col_name, fixed_rows=fixed_rows, fixed_cols=fixed_cols, max_rows=max_items, max_cols=max_items)
 
-def custom_func_getcell(populator, sheet_name, id, prefer_precalculated=True, default="\"{sheet_name}{id} missing\"", **kwargs):
+def custom_func_getcell(populator, sheet_name, id, prefer_precalculated=True, default="\"{id} missing\"", **kwargs):
     """Get the cell address (or literal value) for the cell with the specified ID in the specified sheet.
 
     Parameters
@@ -195,7 +197,7 @@ def custom_func_getcell(populator, sheet_name, id, prefer_precalculated=True, de
     target_sheet_name = kwargs.get("target_sheet_name", None)
     addr = populator.get_named_cell_address_or_value(sheet_name, id, fixed_row=fixed_row, fixed_col=fixed_col, prefer_precalculated=prefer_precalculated, target_sheet_name=target_sheet_name)
 
-    if addr is None:
+    if addr is None or (isinstance(addr, numbers.Number) and math.isnan(addr)):
         if default is None:
             raise ValueError(f"ERROR: Cell '{id}' in '{sheet_name}' not found")
         else:
@@ -228,7 +230,7 @@ def custom_func_addrowid(populator, sheet_name, id, replace_value="", **kwargs):
 
     return replace_value
 
-def custom_func_movingaverage(populator, days, center_cell, template_cell, target_cell, **kwargs):
+def custom_func_movingaverage(populator, days, center_cell, date_cell, match_cell, template_cell, target_cell, **kwargs):
     """Get an Excel formula that will calculate the moving average centered on a cell.
 
     Parameters
@@ -238,6 +240,14 @@ def custom_func_movingaverage(populator, days, center_cell, template_cell, targe
     center_cell : str
         The cell address for the center of the moving average. We will get the cell addresses in a vertical block of size
         days surrounding the center_cell.
+    date_cell : str
+        The cell address specifying the date of the current cell. We will use this cell and address to calculate the
+        day range of the moving average.
+    match_cell : str,
+        The cell address specifying the id to match for inclusion into the moving average calculation. All cells that
+        have the same value at match_cell in the column for match_cell are included (provided it is in the 5-day
+        range). eg. This can be a Site ID, such as "O", in which case all rows for site ID "O" are potentially
+        included in the average calculation.
     template_cell : openpyxl.cell.cell.Cell
         The cell that is being used as the template cell for the current cell. This is required because we need to translate
         the center_cell address from the template_cell to the target_cell.
@@ -246,14 +256,22 @@ def custom_func_movingaverage(populator, days, center_cell, template_cell, targe
     """
     center_cell = Translator(f"={center_cell}", template_cell.coordinate).translate_formula(target_cell.coordinate)
     center_cell = center_cell[1:]
+    date_cell = Translator(f"={date_cell}", template_cell.coordinate).translate_formula(target_cell.coordinate)
+    date_cell = date_cell[1:]
+    match_cell = Translator(f"={match_cell}", template_cell.coordinate).translate_formula(target_cell.coordinate)
+    match_cell = match_cell[1:]
 
     days = int(days)
 
     center_column, center_row = coordinate_from_string(center_cell)
-    delta_up = days // 2
-    delta_down = days - delta_up - 1
-    rng = f'INDIRECT(ADDRESS(ROW({center_cell})-{delta_up},COLUMN({center_cell}))&":"&ADDRESS(ROW({center_cell})+{delta_down},COLUMN({center_cell})))'
-    formula = f'IF(ROW()>={delta_up}+1,IF(COUNT({rng})={days},AVERAGE({rng}),""),"")'
+    match_column, match_row = coordinate_from_string(match_cell)
+    date_column, date_row = coordinate_from_string(date_cell)
+    delta_ahead = days // 2
+    delta_behind = days - delta_ahead - 1
+    # =AVERAGEIFS(D:D,B:B,"="&B2,C:C,"<="&(C2+2),C:C,">="&(C2-2))
+    formula = f'AVERAGEIFS({center_column}:{center_column},{match_column}:{match_column},"="&{match_cell},{date_column}:{date_column},"<="&({date_cell}+{delta_ahead}), {date_column}:{date_column},">="&({date_cell}-{delta_behind}))'
+    # rng = f'INDIRECT(ADDRESS(ROW({center_cell})-{delta_up},COLUMN({center_cell}))&":"&ADDRESS(ROW({center_cell})+{delta_down},COLUMN({center_cell})))'
+    # formula = f'IF(ROW()>={delta_up}+1,IF(COUNT({rng})={days},AVERAGE({rng}),""),"")'
     return formula
 
 def custom_func_average(populator, *args, **kwargs):

@@ -26,13 +26,14 @@ client_secret.json
 .DS_Store
 
 # Website secret files
-qpcr_analyzer_website/qpcr_html/includes/awscreds.php
-qpcr_analyzer_website/qpcr_html/includes/settings.php
+qpcr_analyzer_website/qpcr_html/includes/database.php
+qpcr_analyzer_website/qpcr_html/includes/settings_values.php
+qpcr_analyzer_website/qpcr_html/includes/recaptcha_values.php
 
 # Website
 # qpcr_analyzer_website/
-qpcr_analyzer_website/qpcr_other/*
-!qpcr_analyzer_website/qpcr_other/README.md
+qpcr_analyzer_website/qpcr_data/*
+!qpcr_analyzer_website/qpcr_data/README.md
 qpcr_analyzer_website/composer.phar
 qpcr_analyzer_website/qpcr_html/Formstone/
 qpcr_analyzer_website/qpcr_html/multiple-emails.js/

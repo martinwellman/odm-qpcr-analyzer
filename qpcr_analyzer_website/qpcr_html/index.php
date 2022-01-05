@@ -3,50 +3,45 @@
 
 <?php
 
-require_once "includes/users.php";
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
 
-function contactLink() {
-    // Obfuscated contact link.
-    return "<script>document.write('<'+'a'+' '+'h'+'r'+'e'+'f'+'='+\"'\"+'m'+'&'+'#'+'9'+'7'+';'+'i'+'l'+'t'+'o'+'&'+'#'+'5'+'8'+';'+'%'+
-    '6'+'D'+'&'+'#'+'1'+'1'+'9'+';'+'e'+'l'+'%'+'6'+'C'+'m'+'a'+'n'+'&'+'#'+'6'+'4'+';'+'o'+'%'+'6'+'&'+
-    '#'+'5'+'6'+';'+'%'+'7'+'2'+'i'+'&'+'#'+'4'+'6'+';'+'c'+'a'+\"'\"+'>'+'m'+'w'+'e'+'l'+'l'+'m'+'&'+'#'+
-    '9'+'7'+';'+'&'+'#'+'1'+'1'+'0'+';'+'&'+'#'+'6'+'4'+';'+'o'+'h'+'r'+'i'+'&'+'#'+'4'+'6'+';'+'c'+'&'+
-    '#'+'9'+'7'+';'+'<'+'/'+'a'+'>');</script><noscript>[Turn on JavaScript to see the email address]</noscript>";
+require_once "includes/utils.php";
+require_once "includes/database.php";
+
+safe_session_start();
+if (!get_loggedin_user()) {
+    session_destroy();
+    // header("location: /login.php");
+    require("login.php");
+    exit;
 }
 
-function mfile($file) {
-    $local_file = $file;
-    if ($local_file[0] == "/")
-        $local_file = $_SERVER['DOCUMENT_ROOT'] . $local_file;
-    else
-        $local_file = dirname($_SERVER['SCRIPT_FILENAME']) . DIRECTORY_SEPARATOR . $local_file;
-    print($file . "?v=" . filemtime($local_file));
+if (get_param("login")) {
+    if (get_param("login") !== get_loggedin_user()) {
+        session_destroy();
+        require("login.php");
+        exit;
+    }
 }
+
+update_user(NULL, [
+    "last_access" => date("Y-m-d H:i:s")
+]);
+
+if (!is_verified()) {
+    require("not_verified.php");
+    exit;
+}
+
 ?>
 
 <head>
     <title>ODM QPCR Analyzer</title>
-    <link rel="shortcut icon" href="<?php mfile("/favicon.ico") ?>" />
 
-    <link rel="icon" type="image/png" href="<?php mfile("/images/favicon-16x16.png") ?>" sizes="16x16" />
-    <link rel="icon" type="image/png" href="<?php mfile("/images/favicon-32x32.png") ?>" sizes="32x32" />
-    <link rel="icon" type="image/png" href="<?php mfile("/images/favicon-96x96.png") ?>" sizes="96x96" />
-    <link rel="icon" type="image/png" href="<?php mfile("/images/favicon-192x192.png") ?>" sizes="192x192" />
-
-    <link rel="apple-touch-icon" sizes="57x57" href="<?php mfile("/images/favicon-57x57.png") ?>" />
-    <link rel="apple-touch-icon" sizes="60x60" href="<?php mfile("/images/favicon-60x60.png") ?>" />
-    <link rel="apple-touch-icon" sizes="72x72" href="<?php mfile("/images/favicon-72x72.png") ?>" />
-    <link rel="apple-touch-icon" sizes="76x76" href="<?php mfile("/images/favicon-76x76.png") ?>" /> 
-    <link rel="apple-touch-icon" sizes="114x114" href="<?php mfile("/images/favicon-114x114.png") ?>" />
-    <link rel="apple-touch-icon" sizes="120x120" href="<?php mfile("/images/favicon-120x120.png") ?>" />
-    <link rel="apple-touch-icon" sizes="144x144" href="<?php mfile("/images/favicon-144x144.png") ?>" />
-    <link rel="apple-touch-icon" sizes="152x152" href="<?php mfile("/images/favicon-152x152.png") ?>" />
-    <link rel="apple-touch-icon" sizes="180x180" href="<?php mfile("/images/favicon-180x180.png") ?>" />
-    <link rel="apple-touch-icon" sizes="256x256" href="<?php mfile("/images/favicon-256x256.png") ?>" />
-
-    <meta name="msapplication-TileImage" content="<?php mfile("/images/favicon-270x270.png") ?>" />
-
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <?php include("includes/header.php") ?>
+    <link href="<?php mfile("/css/uploader.css") ?>" rel="stylesheet">
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
     <script src="/Formstone/dist/js/core.js"></script>
@@ -55,7 +50,6 @@ function mfile($file) {
     <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.0/dist/js.cookie.min.js"></script>
     <link href="/multiple-emails.js/multiple-emails.css" rel="stylesheet">
     <link href="/Formstone/dist/css/upload.css" rel="stylesheet">
-    <link href="<?php mfile("/css/main.css") ?>" rel="stylesheet">
 </head>
 <body>
 
@@ -68,16 +62,31 @@ function mfile($file) {
     queryDict = {}
     location.search.substr(1).split("&").forEach(function(item) {queryDict[item.split("=")[0]] = item.split("=")[1]})
 
-    originalDriveParent = "<?php print(get_setting("drive.parent")) ?>";
-    originalRecipients = <?php print(json_encode(get_setting("recipients", []))) ?>;
+    originalDriveParent = "<?php print(get_user_data(NULL, "gdrive_parent")) ?>";
+    originalRecipients = <?php print(json_encode(get_default_recipients())) ?>;
 
-    function getCurrentUser() {
-        return Cookies.get("user") || "";
+    $.fn.preloadImages = function() {
+        this.each(function() {
+            $("<img />")[0].src = this;
+        });
     }
 
-    function setCurrentUser(user) {
-        Cookies.set("user", user, {expires:10*365});
-    }
+    // Preload the Google Signin button images, to prevent flicker when pressing the button
+    $([
+        "/images/google-signin/btn_google_signin_border_pressed_web@2x.png",
+        "/images/google-signin/btn_google_signin_border_disabled_web@2x.png",
+        "/images/google-signin/btn_google_signin_border_focus_web@2x.png",
+        "/images/google-signin/btn_google_signin_border_normal_web@2x.png",
+        // "/images/google-signin/btn_google_signin_dark_pressed_web@2x.png",
+        // "/images/google-signin/btn_google_signin_dark_disabled_web@2x.png",
+        // "/images/google-signin/btn_google_signin_dark_focus_web@2x.png",
+        // "/images/google-signin/btn_google_signin_dark_normal_web@2x.png",
+        // "/images/google-signin/btn_google_signin_light_pressed_web@2x.png",
+        // "/images/google-signin/btn_google_signin_light_disabled_web@2x.png",
+        // "/images/google-signin/btn_google_signin_light_focus_web@2x.png",
+        // "/images/google-signin/btn_google_signin_light_normal_web@2x.png",
+    ]).preloadImages();
+
 
     function generateSessionID() {
         d = new Date();
@@ -112,9 +121,9 @@ function mfile($file) {
         $(".filelist.queue").on("click", ".cancel", onCancel);
         // $(".filelist.queue").on("click", ".remove", onRemove);
         $(".cancel_all").on("click", onCancelAll);
-        $(".start_all").on("click", onStart);
-        $(".run_analyzer").on("click", onRunAnalyzer);
-        $(".reset_form").on("click", onResetForm);
+        // $(".start_all").on("click", onStart);
+        $("#run_analyzer").on("click", onRunAnalyzer);
+        $("#reset_form").on("click", onResetForm);
 
         updateFormstoneUI();
     });
@@ -132,16 +141,30 @@ function mfile($file) {
     function onSaveDriveFolder(e) {
         var folderID = $("#drive-folder-id").val();
 
-        $.post({
-            url: "/action.php?user=" + getCurrentUser(),
-            data: {"sid" : sid, "action" : "updateSettings", "settings" : { "drive" : {"parent" : folderID}} },
-            dataType: "json",
-            async: false,
-            success: driveFolderChanged,
-            error: (response) => {
-                alert("Error settings drive folder: " + JSON.stringify(response));
-            },
-        });
+        <?php recaptcha_start(ACTION_QPCR_UPDATE_GOOGLE_DRIVE_PARENT) ?>
+            $.ajax({
+                url: "/action.php",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                type: "POST",
+                data: {
+                    "sid" : sid, 
+                    "action" : "<?php print(ACTION_QPCR_UPDATE_GOOGLE_DRIVE_PARENT) ?>", 
+                    "parent" : folderID, 
+                    "g-recaptcha-response" : token 
+                },
+                dataType: "json",
+                async: false,                
+                error: function(response) {
+                    alert("Error setting drive folder: " + response.responseText.trim());
+                },
+                success: function(response) {;
+                    driveFolderChanged();
+                    showError(response);
+                }
+            });
+        <?php recaptcha_end() ?>
     }
 
     function updateRecipientsUI() {
@@ -181,17 +204,31 @@ function mfile($file) {
 
     function onSaveRecipientEmails(e) {
         var recipients = JSON.parse($("#emails").val());
-        $.post({
-            url: "/action.php?user=" + getCurrentUser(),
-            data: {"sid" : sid, "action" : "updateSettings", "settings" : { "recipients" : recipients.length ? recipients : null } },
-            dataType: "json",
-            async: false,
-            success: recipientsSaved,
-            error: (response) => {
-                updateRecipientsUI();
-                alert("Error settings default recipients: " + JSON.stringify(response));
-            },
-        });
+        <?php recaptcha_start(ACTION_QPCR_UPDATE_DEFAULT_RECIPIENTS) ?>
+            $.ajax({
+                url: "/action.php",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                type: "POST",
+                data: {
+                    "sid" : sid, 
+                    "action" : "<?php print(ACTION_QPCR_UPDATE_DEFAULT_RECIPIENTS) ?>", 
+                    "recipients" : recipients.length ? recipients : null, 
+                    "g-recaptcha-response" : token 
+                },
+                dataType: "json",
+                async: false,
+                success: function(response) {
+                    recipientsSaved();
+                    showError(response);
+                },
+                error: function(response) {
+                    updateRecipientsUI();
+                    alert("Error setting default recipients: " + response.responseText.trim());
+                },
+            });
+        <?php recaptcha_end() ?>
     }
 
     function recipientsSaved() {
@@ -233,16 +270,19 @@ function mfile($file) {
     //   $(this).parents("form").find(".upload").upload("remove", parseInt(index, 10));
     // }
 
+    function sleep(ms) {
+        return new Promise(function(resolve) { setTimeout(resolve, ms); });
+    }
+
     function onBeforeSend(formData, file) {
         console.log("Before Send");
 
         if (!validExtension(file.name))
             return false;
 
-        // formData.append("test_field", "test_value");
-        // return (file.name.indexOf(".jpg") < -1) ? false : formData; // cancel all jpgs
         formData.append("sid", sid);
-        formData.append("action", "uploadFile");
+        formData.append("action", "<?php print(ACTION_QPCR_UPLOAD_FILE) ?>");
+
         return formData;
     }
 
@@ -280,16 +320,25 @@ function mfile($file) {
     }
 
     function onResetForm(e, force) {
-        // if (!force && $(".reset_form").hasClass("disabled")) {
-        //     return;
-        // }
-
-        $.ajax({
-            url: "/action.php?user=" + getCurrentUser(),
-            data: {"sid" : sid, "action" : "deleteCurrentData" },
-            dataType: "json",
-            async: true
-        });
+        <?php recaptcha_start(ACTION_QPCR_DELETE_CURRENT_DATA) ?>
+            $.ajax({
+                url: "/action.php",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                type: "POST",
+                data: {
+                    "sid" : sid, 
+                    "action" : "<?php print(ACTION_QPCR_DELETE_CURRENT_DATA) ?>",
+                    "g-recaptcha-response" : token 
+                },
+                dataType: "json",
+                async: true,
+                error: function(response) {
+                    alert("Error clearing files: " + response.responseText.trim());
+                },
+            });
+        <?php recaptcha_end() ?>
 
         sid = generateSessionID();
         $(".upload").upload("abort");        
@@ -310,7 +359,7 @@ function mfile($file) {
     }
 
     function onRunAnalyzer(e) {
-        // if ($(".run_analyzer").hasClass("disabled")) {
+        // if ($("#run_analyzer").hasClass("disabled")) {
         //     return;
         // }
         var emails = JSON.parse($("#emails").val());
@@ -332,7 +381,7 @@ function mfile($file) {
         var output_format = $("input[name=output_format]:checked").val()
 
         if (update_remote && !currentDriveAccount) {
-            alert("You must select a Google Drive account if \"Update Google Drive versions\" is selected.");
+            alert("You must select a Google Drive account if \"Update on Google Drive\" is selected.");
             return;
         }
 
@@ -343,26 +392,36 @@ function mfile($file) {
             files.push($(file_els[i]).text());
         }
         
-        $.ajax({
-            url: "/action.php?user=" + getCurrentUser(),
-            data: {
-                "sid" : sid, 
-                "action" : "runAnalyzer", 
-                "to_emails" : emails, 
-                "files" : files, 
-                "split_by_site" : split_by_site, 
-                "output_format" : output_format,
-                "update_remote" : update_remote,
+        <?php recaptcha_start(ACTION_QPCR_RUN_ANALYZER) ?>
+            $.ajax({
+                url: "/action.php",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
                 },
-            dataType: "json",
-            success: analyzerStarted,
-            error: (response) => {
-                alert("Error running analyzer. " + JSON.stringify(response));
-                is_processing = false; 
-                updateFormstoneUI();
-            },
-            async: true
-        });
+                type: "POST",
+                data: {
+                    "sid" : sid, 
+                    "action" : "<?php print(ACTION_QPCR_RUN_ANALYZER) ?>", 
+                    "to_emails" : emails, 
+                    "files" : files, 
+                    "split_by_site" : split_by_site, 
+                    "output_format" : output_format,
+                    "update_remote" : update_remote,
+                    "g-recaptcha-response" : token
+                },
+                dataType: "json",
+                success: function(response) {
+                    // Note: analyzerStarted will handle displaying an error if there is one
+                    analyzerStarted(response);
+                },
+                error: function(response) {
+                    alert("Error running analyzer. " + response.responseText.trim());
+                    is_processing = false; 
+                    updateFormstoneUI();
+                },
+                async: true
+            });
+        <?php recaptcha_end() ?>
         updateFormstoneUI();
     }
 
@@ -373,9 +432,9 @@ function mfile($file) {
         queued = $(".form").find(".filelist.queue").find("li").not(".error").length;
         complete = $(".form").find(".filelist.complete").find("li").not("error").length;
         if (is_processing || queued > 0 || complete == 0) {
-            $(".run_analyzer").prop("disabled", true);
+            $("#run_analyzer").prop("disabled", true);
         } else {
-            $(".run_analyzer").prop("disabled", false);
+            $("#run_analyzer").prop("disabled", false);
         }
         if (queued + queued_errors == 0) {
             $(".queued_empty").show();
@@ -388,10 +447,10 @@ function mfile($file) {
             $(".uploaded_empty").hide();
         }
         if (is_processing || (queued == 0 && complete == 0)) {
-            $(".reset_form").prop("disabled", true);
+            $("#reset_form").prop("disabled", true);
         } else {
-            $(".reset_form").removeClass("disabled");
-            $(".reset_form").prop("disabled", false);
+            $("#reset_form").removeClass("disabled");
+            $("#reset_form").prop("disabled", false);
         }
     }
 
@@ -402,7 +461,7 @@ function mfile($file) {
         if (typeof response == 'string')
             try {
                 response = JSON.parse(response);
-            } catch {
+            } catch (e) {
 
             }
         if (response["full_abort"])
@@ -486,7 +545,7 @@ function mfile($file) {
         if (typeof response == "string") {
             try {
                 response = JSON.parse(response)
-            } catch {
+            } catch (e) {
                 return response;
             }
         }
@@ -555,39 +614,39 @@ function mfile($file) {
                 scope: 'https://www.googleapis.com/auth/drive'
             });
             $('#signinButton').prop("disabled", false);
+            // $('#clearGoogleDrive').prop("disabled", false);
         });
     }
 
-    function signInCallback(authResult) {
+    function googleSignInCallback(authResult) {
         if (authResult['code']) {
-            // Send the code to the server
-            $.ajax({
-                type: 'POST',
-                url: '/register.php?user=' + getCurrentUser(),
-                // Always include an `X-Requested-With` header in every AJAX request,
-                // to protect against CSRF attacks.
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                contentType: 'application/octet-stream; charset=utf-8',
-                success: function(result) {
-                    // Handle or verify the server response.
-                    if (showError(result)) {
-                        return;
-                    }
-                    try {
-                        result = JSON.parse(result);
-                    } catch (e) {
-                        alert(result);
-                    }
-                    updateDriveUI(result["email"]);
-                },
-                error: function(result) {
-                    showError(result);
-                },
-                processData: false,
-                data: authResult['code']
-            });
+            <?php recaptcha_start(ACTION_QPCR_DRIVE_REGISTER) ?>
+                // Send the code to the server
+                $.ajax({
+                    url: '/action.php',
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest"
+                    },
+                    type: "POST",
+                    dataType: "json",
+                    data: { 
+                        "sid" : sid, 
+                        "authCode": authResult["code"], 
+                        "action": "<?php print(ACTION_QPCR_DRIVE_REGISTER) ?>", 
+                        "g-recaptcha-response" : token 
+                    },
+                    success: function(result) {
+                        // Handle or verify the server response.
+                        if (showError(result)) {
+                            return;
+                        }
+                        updateDriveUI(result["email"], result["picture"], result["name"]);
+                    },
+                    error: function(result) {
+                        alert("Error setting Google Drive account: " + response.responseText.trim());
+                    },
+                });
+            <?php recaptcha_end() ?>
         } else {
             // There was an error.
             alert("Error authenticating");
@@ -610,23 +669,8 @@ function mfile($file) {
             $("#update_remote_contents").hide();
     }
 
-    function updateUserUI() {
-        $('.current-user').text(getCurrentUser() || "");
-    }
-
-    $(document).ready(() => {
-        if (getCurrentUser() == "") {
-            $(".select-user-container").show();
-            $(".main-container").hide();
-        } else {
-            $(".select-user-container").hide();
-            $(".main-container").show();
-        }
-
-        // Reset cookie expiry
-        setCurrentUser(getCurrentUser());
+    $(document).ready(function() {
         updateRemoteUI();
-        updateUserUI();
         updateDriveFolderUI();
         updateRecipientsUI();
         
@@ -641,44 +685,69 @@ function mfile($file) {
         $("#save-recipient-emails").on("click", onSaveRecipientEmails);
         $("#reset-recipient-emails").on("click", onResetRecipientEmails);
 
-        $(".user-select").on("click", function(el) {
-            setCurrentUser($(this).attr("data-username"));
-        });
-
-        $('#changeUserButton').on("click", function() {
-            setCurrentUser("");
-            location.reload();            
+        $('#logoutButton').on("click", function() {
+            location.href = "/logout.php";
         })
 
         $('#signinButton').on("click", function() {
-            // signInCallback defined in step 6.
-            auth2.grantOfflineAccess().then(signInCallback);
+            auth2.grantOfflineAccess().then(googleSignInCallback);
         });
+
+        $('#clearGoogleDrive').on("click", function() {
+            if (confirm("Remove access to the Google Drive account?")) {
+                <?php recaptcha_start(ACTION_QPCR_CLEAR_GOOGLE_DRIVE) ?>
+                    $.ajax({
+                        url: "/action.php",
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest"
+                        },
+                        type: "POST",
+                        data: {
+                            "sid" : sid, 
+                            "action" : "<?php print(ACTION_QPCR_CLEAR_GOOGLE_DRIVE) ?>", 
+                            "g-recaptcha-response" : token 
+                        },
+                        dataType: "json",
+                        async: false,
+                        success: function(response) {
+                            showError(response);
+                            updateDriveUI(null);
+                        },
+                        error: function(response) {
+                            alert("Error removing access to Google Drive account: " + response.responseText.trim());
+                        },
+                    });
+                <?php recaptcha_end() ?>
+            } else {
+                // Nothing to do
+            }
+        })
 
         $('#update_remote').on("change", updateRemoteUI);
 
-        $.get(
-            "/get_settings.php?user=" + getCurrentUser(),
-            function(result) {
-                try {
-                    result = JSON.parse(result);
-                } catch (e) {
-                    alert(result);
-                }
-                email = result["email"];
-                updateDriveUI(email);
-            },
-        )
+        updateDriveUI(
+            "<?php print(get_user_google_data(NULL, "email")) ?>", 
+            "<?php print(get_user_google_data(NULL, "picture")) ?>", 
+            "<?php print(get_user_google_data(NULL, "name")) ?>"
+            );
     });
 
-    function updateDriveUI(email) {
+    function updateDriveUI(email, picture, name) {
         currentDriveAccount = email;
         if (email) {
+            // Has been signed in
             $(".signin-details").text(email);
             $("#signinButton").attr("value", "Change Drive Account");
+            $("#clearGoogleDrive").prop("disabled", false);
+            $("#drive-profile-image").attr("src", picture ? picture : "/images/blank.png");
+            $("#drive-profile-image").attr("alt", name ? name : "Google Drive");
         } else {
+            // Not signed in to any account
             $(".signin-details").text("None");
             $("#signinButton").attr("value", "Sign In With Google");
+            $("#clearGoogleDrive").prop("disabled", true);
+            $("#drive-profile-image").attr("src", "/images/blank.png");
+            $("#drive-profile-image").attr("alt", "Google Drive");
         }
     }
 
@@ -691,29 +760,9 @@ function mfile($file) {
 </script>
 <script src="https://apis.google.com/js/client:platform.js?onload=driveStart" async defer></script>
 
-<div class="select-user-container" style="display: none;">
-    <div class="select-user-container-inner">
-        <h1>Select User</h1>
-        
-        <?php 
-        $users = get_known_users();
-        if (count($users) > 0) {
-            print("<ul>");
-            foreach ($users as $userinfo) {
-                $username = $userinfo["username"];
-                print('<li><a href="/" class="user-select" data-username="' . $username . '">' . $username . '</a></li>');
-            }
-            print("</ul>");
-        } else {
-            print("Empty");
-        }
-        ?>
-    </div>
-</div>
-
-<div class="main-container" style="display: none;">
-<form action="#" method="GET" class="form form-container">
+<div class="main-container">
     <div class="uploader-container">
+        <form action="#" method="GET" class="form">
         <div class="uploader-container-inner">
         <h1>ODM QPCR Analyzer</h1>
         <div class="target-container">
@@ -724,63 +773,70 @@ function mfile($file) {
             <div class="upload fs-upload-element fs-upload fs-light target-box"></div>
         </div>
         <div class="filelists">
-            <h5>Uploaded:</h5>
+            <b>Uploaded:</b><br />
             <div class="uploaded_empty filelists_empty">Empty</div>
             <ol class="filelist complete"></ol>
-            <h5>Queued:</h5>
+            <b>Queued:</b><br />
             <div class="queued_empty filelists_empty">Empty</div>
             <ol class="filelist queue"></ol>
-            <!-- <span class="start_all button">Start Upload</span> -->
             <div class="analyzer_buttons">
-            <input type="button" class="run_analyzer button" value="Run Analyzer" />
-            <input type="button" class="reset_form button" value="Clear Files" />
+            <input type="button" id="run_analyzer" class="button" value="Run Analyzer" />
+            <input type="button" id="reset_form" class="button" value="Clear Files" />
             </div>
-            <!-- <span class="cancel_all">Cancel All</span> -->
         </div>
         </div>
+        </form>
     </div>
     <div class="options-container">
     <div class="options-container-inner">
     <h1>Settings</h1>
     <div class="line"></div>
-    <b>User:</b> <span class="options-title-data current-user"></span><br />
+    <b>User:</b> <span class="options-title-data current-user"><?php print($_SESSION["username"]) ?></span><br />
     <div class="settings-suboptions">
-    <input type="button" id="changeUserButton" class="button settings-button" value="Change User" />
+    <input type="button" id="logoutButton" class="button settings-button" value="Logout" />
     </div>
     <div class="line"></div>
 
     <div class="options-title">Recipient Email Addresses:</div>
     <div class="settings-suboptions settings-subgrouped">
-    <input type="text" id="emails" placeholder="Email" value='<?php print(json_encode(get_setting("recipients", []))) ?>' />
-    <div class="options-notes">Only approved email addresses are allowed. To approve your email contact <?php print(contactLink()) ?>.</div>
+    <input type="text" id="emails" placeholder="Email" value='<?php print(json_encode(get_default_recipients())) ?>' />
+    <div class="space-small"></div>
     <input type="button" id="save-recipient-emails" class="button settings-button" value="Save Emails as Defaults" />
     <input type="button" id="reset-recipient-emails" class="button settings-button" value="Reset" />
     </div>
 
     <div class="line"></div>
 
-    <input type="checkbox" id="split_by_site" class="disable-update-remote" /> <label style="display:inline-block" for="split_by_site" class="disable-update-remote">Split output by site</label>
+    <input type="checkbox" id="split_by_site" class="disable-update-remote" /> <label for="split_by_site" class="disable-update-remote">Split output by site</label>
 
     <div class="line"></div>
 
-    <input type="radio" id="ottawa_long_format" value="ottawa_long_format" name="output_format" class="disable-update-remote" checked /> <label class="disable-update-remote" style="display:inline-block" for="ottawa_long_format">Ottawa Long format</label><br />
-    <input type="radio" id="ottawa_wide_format" value="ottawa_wide_format" name="output_format" /> <label style="display:inline-block" for="ottawa_wide_format">Ottawa Wide format</label><br />
-    <input type="radio" id="ottawa_b117_format" value="ottawa_b117_format" name="output_format" /> <label style="display:inline-block" for="ottawa_b117_format">Ottawa B117 format</label><br />
+    <?php
+    foreach (OUTPUT_FORMATS as $output_format=>$settings) {
+        $checked = isset($settings["default"]) ? "checked" : "";
+        $disable_update_remote = isset($settings["lambda_remote_target"]) && get_setting($settings["lambda_remote_target"]) ? "" : "disable-update-remote";
+        print("<input type='radio' id='{$output_format}' value='{$output_format}' name='output_format' class='{$disable_update_remote}' {$checked} /> <label class='{$disable_update_remote}' for='{$output_format}'>{$settings['description']}</label><br />");
+    }
+    ?>
 
     <div class="line"></div>
 
-    <input type="checkbox" id="update_remote" /> <label style="display:inline-block" for="update_remote">Update on Google Drive</label>
+    <input type="checkbox" id="update_remote" /> <label for="update_remote">Update on Google Drive</label>
 
     <div class="settings-suboptions settings-subgrouped" id="update_remote_contents">
     <div class="options-title">Google Drive Account:</div>
-    <div class="settings-suboptions">
+    <div class="settings-suboptions" style="position: relative;">
+    <img src="/images/blank.png" id="drive-profile-image" alt="Google Drive" />
     <span class="signin-details">Retrieving details...</span><br />
-    <input type="button" id="signinButton" class="button settings-button" value="Sign In With Google" disabled />
+    <div class="space-tiny"></div>
+    <input type="button" id="signinButton" class="button settings-button google-signin-button" value="Sign In With Google" disabled />
+    <input type="button" id="clearGoogleDrive" class="button settings-button" value="Clear" disabled />
     </div>
     <div class="line"></div>
     <div class="options-title">Save in Drive Folder ID:</div>
     <div class="settings-suboptions">
-    <input type="text" id="drive-folder-id" placeholder="Folder ID" value="<?php print(get_setting("drive.parent")); ?>" /><br />
+    <input type="text" id="drive-folder-id" placeholder="Folder ID" value="<?php print(get_user_data(NULL, "gdrive_parent")); ?>" /><br />
+    <div class="space-small"></div>
     <input type="button" id="drive-folder-id-save" class="button settings-button" value="Save" />
     <input type="button" id="drive-folder-id-reset" class="button settings-button" value="Reset" />
     <input type="button" id="drive-folder-id-view" class="button settings-button" value="View Folder" />
@@ -789,15 +845,13 @@ function mfile($file) {
 
     <div class="line"></div>
 
-    <b>Lambda Version:</b> <span class="options-title-data"><?php print(QPCR_VERSION); ?></span><br />
+    <b>Lambda Version:</b> <span class="options-title-data"><?php print(get_setting("QPCR_VERSION")); ?></span><br />
     <div class="line"></div>
     </div>
     </div>
-</form>
 </div>
 
-<div class="footer">
-</div>
+<?php include("includes/footer.php") ?>
 
 </body>
 </html>

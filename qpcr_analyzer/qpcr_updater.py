@@ -303,7 +303,6 @@ if __name__ == "__main__":
         data = EasyDict(yaml.safe_load(f))
     gdrive_utils.set_creds_file("credentials.json")
     gdrive_utils.set_partial_token_data(data.tokens)
-    gdrive_utils.drive_set_root_id(data.parent_drive_folder)
 
     tic = datetime.now()
     updater = QPCRUpdater(opts.config, opts.populator_config, sites_config=opts.sites_config, sites_file=opts.sites_file)

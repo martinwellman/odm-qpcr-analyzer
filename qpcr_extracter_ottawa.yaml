@@ -1,0 +1,204 @@
+
+data_sheet : 0
+sample_id_col : "Sample"
+ct_col : "Cq"
+target_col : "Target"
+well_id_col : "Well"
+sq_col : "Starting Quantity (SQ)"
+log_sq_col : "Log Starting Quantity"
+sq_mean_col : "SQ Mean"
+sq_std_col : "SQ Std. Dev"
+
+std_copies_col : "Standard Copies"
+
+index_col : "Index"
+source_analysis_date_col : "qPCR Date"
+analysis_date_col : "Analysis Date"
+sample_date_col : "Sample Date"
+instrument_col : "Instrument"
+plate_id_col : "Plate ID"
+
+cleaned_sample_id_col : "Cleaned ID"
+
+remove_empty_col : "Well"
+
+well_type_col : "Content"
+well_type_std : "Std"
+well_type_unk : "Unkn"
+well_type_ntc : "NTC"
+
+# well_type_eb : "EB"
+
+remove_unknowns_with_no_sample_data : False
+
+value_mappers : [
+    {
+        match_column : "Sample",
+        match_expression : "^EB$",
+        target_column : "Content",
+        target_value : "EB",
+    }
+]
+
+# sort_ct : [
+#     {
+#         genes : ["pepper", "pmmov"],
+#         well_types : ["Unkn"],
+#         order : [ 2, 3, 4, 0, 1, 5, 6],
+#     }
+# ]
+
+defaults : [
+    {
+        columns : [ "Settled solids(mL)" ],
+        well_types : [ "Unkn" ],
+        default_value : 40,
+        dtype : "float",
+    },
+]
+
+# Extract these columns in the same order. Second variable is if the column is required (True) or optional (False)
+# Missing optional columns will be initialized to None
+extract_pdf_columns : [
+    [ "Well", True ],
+    [ "Fluor", False ],
+    [ "Target", True ],
+    [ "Content", True ],
+    [ "Sample", True ],
+    [ "Cq", True ],
+    [ "Cq Mean", False ],
+    [ "Cq Std. Dev", False ],
+    [ "Starting Quantity (SQ)", False ],
+    [ "Log Starting Quantity", False ],
+    [ "SQ Mean", False ],
+    [ "SQ Std. Dev", False ],    
+]
+
+string_mapper : [
+    # {
+    #     columns : "Target",
+    #     match : "Pepper.*",
+    #     replace : "Pepper",
+    #     ignore_case : True,
+    # },
+    {
+        columns : "Target",
+        match : "1:([0-9]*)",   # eg 1:10, 1:40 for 10 or 40 dilutions of Pepper. Replace with "10" or "40".
+        replace : "\\1",
+        ignore_case : True,
+    },
+    {
+        columns : "Target",
+        match : "^(pepper|pmmov|npmmov|pep)[\\s/\\:]*([0-9]*)$",
+        replace : "Pepper\\2",
+        ignore_case : True,
+    },
+]
+
+replicates : 3
+preferred_std_replicates : 3
+
+plate_rows : 8
+plate_cols : 12
+
+default_year : 2021
+
+std_copies_per_well : {
+    _default : [
+        300.00,
+        60.00,
+        15.00,
+        7.50,
+        3.75,
+        1.88,
+        ],
+    Pepper : [
+        # For samples Jul 13, 2021 or earlier:
+        # 58339.995,
+        # 14584.99875,
+        # 3646.249688,
+        # 911.5624219,
+        # 227.8906055,
+        # For samples Jul 14, 2021 or later:
+        # 50203.995,
+        # 12550.99875,
+        # 3137.749688,
+        # 784.4374219,
+        # 196.1093555,
+        # For samples Nov 1, 2021 or later:
+        31026.81,
+        7756.70,
+        1939.18,
+        484.79,
+        121.20,
+        ],
+}
+
+months_mapper: [
+    ["Jan", "January"],
+    ["Feb", "February"],
+    ["Mar", "March"],
+    ["Apr", "April"],
+    ["May"],
+    ["Jun", "June"],
+    ["Jul", "July"],
+    ["Aug", "August"],
+    ["Sep", "Sept", "September"],
+    ["Oct", "October"],
+    ["Nov", "November"],
+    ["Dec", "December"],
+]
+
+samples_excel: {
+    # If set, then remove all unknowns that do not have matching sample data
+    # remove_if_no_sample_data : "Sample Date",
+
+    copy_samples_cols : [
+        "Sample Date",
+        "Lab Arrival Date",
+        "Extraction Date",
+        "qPCR Date",
+        "Total volume(mL)",
+        "Settled solids(mL)",
+        "Full",
+        "Empty",
+        "Extracted Weight",
+        "Notes",
+    ],
+
+    # Apply the following to the sample ID for matching between the full and samples sheets
+    # These are only applied to the columns for matching, the actual sample ID remains unchanged
+    join_samples_id_pairing : {
+        full_df : [
+            {
+                pattern : "_r[0-9]*$",
+                replace : "",
+            },
+        ],
+        samples_df : [
+            {
+                pattern : "u_of_o",
+                replace : "uo",
+            },
+        ],
+    },
+
+    sample_location_col : "Sample location",
+
+    sample_date_col : "Sample Date",
+
+    order_sizes_cols : [
+        "Empty", "Full"
+    ],
+
+    # Download a new samples file (if an URL) every this many seconds
+    samples_file_cache_ttl : 600,
+
+    # string_mapper : [
+    #     {
+    #         columns : "Sample location",
+    #         match : "",
+    #         replace : "",
+    #     },
+    # ],
+}

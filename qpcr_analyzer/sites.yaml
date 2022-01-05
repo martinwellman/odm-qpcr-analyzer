@@ -19,6 +19,11 @@ columns : {
         make_lower : True,
     },
 
+    fileid : {
+        column : "File ID",
+        make_lower : True,
+    },
+
     parentid : {
         column : "Parent ID",
         make_lower : True,

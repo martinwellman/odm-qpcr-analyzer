@@ -26,6 +26,10 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import os
 
+# If True, then verify_emails will always set all emails as verified and valid to receive emails.
+# If False, then it will use SES to check the VerificationStatus of emails, and only mark those emails that
+# have been verified to receive emails. This should be done if SES is in the sandbox
+ALLOW_ALL_EMAIL_RECIPIENTS = True
 CHARSET = "UTF-8"
 
 def send_email(sender, dest_emails, subject, email_html, email_text=None, attachments=None, aws_region="us-east-1"):
@@ -99,6 +103,9 @@ def verify_emails(emails):
     if isinstance(emails, str):
         emails = [emails]
 
+    if ALLOW_ALL_EMAIL_RECIPIENTS:
+        return emails, []
+
     identities = []
     for email in emails:
         identities.append(email)
@@ -133,3 +140,4 @@ def verify_emails(emails):
         unverified.append(email)
 
     return verified, unverified
+

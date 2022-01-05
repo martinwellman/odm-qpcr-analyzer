@@ -1074,7 +1074,7 @@ class QPCRPopulator(object):
             if match_sheet_b == None:
                 # No gene_b curve with the same plateID, so instead pair by index into gene_a_sheets and
                 # gene_b_sheets
-                match_sheet_b = gene_b_sheets[min(idx_a, len(gene_b_sheets))]
+                match_sheet_b = gene_b_sheets[min(idx_a, len(gene_b_sheets)-1)]
             if match_sheet_b is not None:
                 pairs.append((sheet_a, match_sheet_b))
         return pairs
@@ -1220,6 +1220,10 @@ class QPCRPopulator(object):
 
                     target_row, _ = self.copy_rows(template_cal, CAL_ROW_DATA, ws_title, cur_data, other_data=other_data, target_row=target_row, target_col=target_col, index=idx)
                     idx += 1
+
+                # if len(cal_ct) == 0:
+                #     print("!!!!", gene_name, plate_id)
+                #     continue
 
                 # logsq = [[sq] for sq in cal_logsq]
 
@@ -2116,22 +2120,22 @@ if __name__ == "__main__":
             # "qaqc" : "qaqc_ottawa_b117.yaml",
 
             # Ottawa Wide
-            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-sep10.xlsx",
-            # "input_file" : "odmdata/odm_merged-test.xlsx",
-            "template_file" : "qpcr_template_ottawa_wide.xlsx",
-            "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_wide_diff.yaml"],
-            "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
+            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-dec6.xlsx",
+            # # "input_file" : "odmdata/odm_merged-test.xlsx",
+            # "template_file" : "qpcr_template_ottawa_wide.xlsx",
+            # "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_wide_diff.yaml"],
+            # "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
 
             # Ottawa Long
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-test.xlsx",
-            # # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
-            # "template_file" : "qpcr_template_ottawa.xlsx",
-            # "config" : ["qpcr_populator_ottawa.yaml"],
-            # "qaqc" : ["qaqc_ottawa.yaml"],
+            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-dec26.xlsx",
+            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
+            "template_file" : "qpcr_template_ottawa.xlsx",
+            "config" : ["qpcr_populator_ottawa.yaml"],
+            "qaqc" : ["qaqc_ottawa.yaml"],
 
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/{site_parent_title}/populated - {site_parent_title} - Test.xlsx",
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/{parent_site_title}/out-aug9 - {parent_site_title} - {site_id}.xlsx",
-            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/populated-test.xlsx",
+            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/dec26.xlsx",
             "hide_qaqc" : False,
             "overwrite" : True,
 

@@ -61,7 +61,7 @@ DISABLE_ALL_EMAILS = False
 TEMP_DIR = None            # Set to None (preferred) to get a new tempdir with tempfile.gettempdir()
 OVERRIDE_RUNID = None      # Set to None (preferred) to create a new unique run ID
 DELETE_TEMP_DIR = True     # Set to True (preferred) to delete the temp dir once done
-UPLOAD_RESULTS = False
+UPLOAD_RESULTS = True      # Set to True to upload outputs to S3 for long-term storage
 
 # Will be retrieved from the passed in parameter "output_debug"
 OUTPUT_DEBUG = False
@@ -456,9 +456,6 @@ def handler(event, context):
         remote_target = event.get("remote_target", None)
         hide_qaqc = event.get("hide_qaqc", False)
 
-        parent_drive_folder = event.get("parent_drive_folder", None)
-        gdrive_utils.drive_set_root_id(parent_drive_folder)
-
         if not input_files:
             raise QPCRError("No input files specified.")
         elif not output_path:
@@ -495,11 +492,6 @@ def handler(event, context):
             gdrive_utils.set_creds_file(credentials_file)
         if tokens:
             gdrive_utils.set_partial_token_data(tokens)
-
-        if remote_target and parent_drive_folder:
-            if not gdrive_utils.drive_has_write_permission(parent_drive_folder):
-                user_email_address = gdrive_utils.drive_get_user_email_address()
-                raise QPCRError(f"The user {user_email_address} does not have write permissions for the Google Drive folder with Id {parent_drive_folder}. Make sure the folder exists and that it has been shared to {user_email_address} with editor permissions.")
 
         # Download all the files
         samples = _download(event.get("samples", None), "samples data sheet")
@@ -606,10 +598,7 @@ def handler(event, context):
                     try:
                         cloud_utils.upload_file(upload_file, os.path.join(output_path, os.path.basename(upload_file)))
                     except:
-                        if parent_drive_folder:
-                            raise QPCRError(f"Could not upload results to the Google Drive folder with ID '{parent_drive_folder}'. Please make sure your Google Drive account has access and that the folder exists.")
-                        else:
-                            raise QPCRError(f"Could not upload file to {upload_file}.")
+                        raise QPCRError(f"Could not upload file to {upload_file}.")
                 else:
                     shutil.copy(upload_file, os.path.join(output_path, os.path.basename(upload_file)))
 

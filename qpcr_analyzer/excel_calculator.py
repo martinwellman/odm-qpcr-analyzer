@@ -69,7 +69,7 @@ def add_excel_calculated_values(xl, sheets=None):
                         cell.calculated_value = "#NAME?"
                     except FormulaEvalError as e:
                         pass
-                    except e:
+                    except Exception as e:
                         raise ValueError(f"ERROR evaluating Excel formula at {addr}: {cell.value}: {e}")
 
 @excel_helper()

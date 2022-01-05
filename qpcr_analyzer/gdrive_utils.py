@@ -7,8 +7,7 @@ Library for downloading from and uploading to Google Drive.
 The Google Drive credentials and access token must be set with one of the set_creds and set_token functions (eg. set_creds_file and
 set_token_file).
 
-All remote paths are relative to either the user's root folder, or the folder ID specified by drive_set_root_id (or in
-some cases the root_id passed to a function)
+All remote paths are relative to either the user's root folder.
 
 ## Usage
 
@@ -40,8 +39,6 @@ _credentials_file = "credentials.json"
 _token_file = "token.json"
 _credentials_data = None
 _token_data = None
-
-_drive_root_id = None
 
 # See set_allow_flow: If True, then when we authenticate the user we allow blocking for user input if required (eg. to
 # get the access/refresh token). If False then we raise an exception if user input is required, so we can continue execution.
@@ -161,22 +158,11 @@ def get_drive_service():
     return service
 
 def drive_get_root_id():
-    """Get the folder ID of the current root to use for all Google Drive access. This is either the
-    user's account root folder, or the folder set with the previous call to drive_set_root_id.
+    """Get the folder ID of the current root to use for all Google Drive access. This is the user's account root folder.
     """
-    global _drive_root_id
-    if _drive_root_id:
-        return _drive_root_id
-    else:
-        return get_drive_service().files().get(fileId='root').execute()['id']
+    return get_drive_service().files().get(fileId='root').execute()['id']
 
-def drive_set_root_id(drive_root_id):
-    """Set the root folder ID for all Google Drive access. Set to empty/None to use the user's account root folder.
-    """
-    global _drive_root_id
-    _drive_root_id = drive_root_id
-
-def drive_download_from_id(file_id, local_dir, file_name=None):
+def drive_download_from_id(file_id, local_dir=None, file_name=None):
     """Download the specified file_id from Google Drive. It is saved to the local directory local_dir, either with
     the same filename as the source file, or named file_name if specified.
     """
@@ -206,11 +192,10 @@ def drive_download_from_id(file_id, local_dir, file_name=None):
         f.write(fh.getbuffer())
     return local_path
 
-def drive_download(path, local_dir, file_name=None, root_id=None):
+def drive_download(path, local_dir=None, file_name=None, root_id=None):
     """Download the specified file (path) from the current Google Drive account, and save it at local_dir. 
-    The path parameter is relative to folder with the specified root_id, or the user's root folder or the root specified in
-    drive_set_root_id if root_id is not specified. If file_name is specified then save it with that filename (in local_dir),
-    otherwise the filename in path is used.
+    The path parameter is relative to folder with the specified root_id, or the user's root folder. If file_name 
+    is specified then save it with that filename (in local_dir), otherwise the filename in path is used.
     """
     return drive_download_from_id(drive_get_file_id(path, root_id), local_dir, file_name=file_name)
 
@@ -227,8 +212,7 @@ def get_mime_type(file):
     }.get(ext, None)
 
 def drive_upload(local_file, remote_file, root_id=None):
-    """Upload a file. Specifying root_id as a folder ID will upload to remote_file relative to the new root_id.
-    All remote directories to remote_file will be created if they do not exist.
+    """Upload a file. All remote directories to remote_file will be created if they do not exist.
     """
     remote_file_name = os.path.basename(remote_file)
     parent = drive_create_folder(os.path.dirname(remote_file), root_id)
@@ -265,13 +249,24 @@ def drive_get_file_id(path, root_id=None):
     matches = [f.get("id", None) for f in files if f.get("name") == name]
     return matches[0] if len(matches) > 0 else None
 
+def get_tagged_id(name):
+    if len(name) >= 4 and name[:2] == "::" and name[-2:] == "::":
+        return name[2:-2]
+    return None
+
 def drive_get_folder_id(path, root_id=None):
     """Get the Google Drive folder ID of the specified file (path) on Google Drive.
     """
-    parent = root_id or drive_get_root_id()
     page_token = None
     service = get_drive_service()
     path_comps = path.split("/")
+    parent = root_id or drive_get_root_id()
+
+    # Check if first component is a folder ID
+    if len(path_comps) > 0 and get_tagged_id(path_comps[0]):
+        parent = get_tagged_id(path_comps[0])
+        path_comps.pop(0)
+
     # Descend the path one path component at a time. If any component doesn't
     # exist on Google Drive then return None
     while len(path_comps) > 0:
@@ -324,14 +319,19 @@ def drive_get_files_in_folder(path, root_id=None):
 def drive_create_folder(path, root_id=None):
     """Create the specified folder (path) on Google Drive.
     """
-    comps = path.split("/")
+    path_comps = path.split("/")
     parent = root_id or drive_get_root_id()
+
+    # Check if first component is a folder ID
+    if len(path_comps) > 0 and get_tagged_id(path_comps[0]):
+        parent = get_tagged_id(path_comps[0])
+        path_comps.pop(0)
 
     # Determine which components in the path already exist. parent is
     # the id of the last one.
     last_exist_idx = -1
-    for i in range(len(comps)):
-        cur_path = comps[i]
+    for i in range(len(path_comps)):
+        cur_path = path_comps[i]
         cur_id = drive_get_folder_id(cur_path, parent)
         if cur_id is None:
             break
@@ -339,7 +339,7 @@ def drive_create_folder(path, root_id=None):
         parent = cur_id
 
     # Create folders starting at index last_exist_idx, in parent
-    create_folders = comps[last_exist_idx+1:]
+    create_folders = path_comps[last_exist_idx+1:]
     if len(create_folders) == 0:
         return parent    
     for folder in create_folders:

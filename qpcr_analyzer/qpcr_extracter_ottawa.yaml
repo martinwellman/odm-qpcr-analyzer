@@ -5,9 +5,6 @@ ct_col : "Cq"
 target_col : "Target"
 well_id_col : "Well"
 sq_col : "Starting Quantity (SQ)"
-log_sq_col : "Log Starting Quantity"
-sq_mean_col : "SQ Mean"
-sq_std_col : "SQ Std. Dev"
 
 std_copies_col : "Standard Copies"
 
@@ -27,10 +24,6 @@ well_type_std : "Std"
 well_type_unk : "Unkn"
 well_type_ntc : "NTC"
 
-# well_type_eb : "EB"
-
-remove_unknowns_with_no_sample_data : False
-
 value_mappers : [
     {
         match_column : "Sample",
@@ -39,14 +32,6 @@ value_mappers : [
         target_value : "EB",
     }
 ]
-
-# sort_ct : [
-#     {
-#         genes : ["pepper", "pmmov"],
-#         well_types : ["Unkn"],
-#         order : [ 2, 3, 4, 0, 1, 5, 6],
-#     }
-# ]
 
 defaults : [
     {
@@ -75,12 +60,6 @@ extract_pdf_columns : [
 ]
 
 string_mapper : [
-    # {
-    #     columns : "Target",
-    #     match : "Pepper.*",
-    #     replace : "Pepper",
-    #     ignore_case : True,
-    # },
     {
         columns : "Target",
         match : "1:([0-9]*)",   # eg 1:10, 1:40 for 10 or 40 dilutions of Pepper. Replace with "10" or "40".
@@ -96,37 +75,41 @@ string_mapper : [
 ]
 
 replicates : 3
-preferred_std_replicates : 3
-
-plate_rows : 8
-plate_cols : 12
 
 default_year : 2021
 
-std_copies_per_well : {
-    _default : [
-        300.00,
-        60.00,
-        15.00,
-        7.50,
-        3.75,
-        1.88,
-        ],
-    Pepper : [
-        # For samples Jul 13, 2021 or earlier:
-        # 58339.995,
-        # 14584.99875,
-        # 3646.249688,
-        # 911.5624219,
-        # 227.8906055,
-        # For samples Jul 14, 2021 or later:
-        50203.995,
-        12550.99875,
-        3137.749688,
-        784.4374219,
-        196.1093555,
-        ],
-}
+# If std_copies_per_well is not specified the the values in the BioRad file under the sq_col column
+# are used as the values for copies per well
+# std_copies_per_well : {
+#     _default : [
+#         300.00,
+#         60.00,
+#         15.00,
+#         7.50,
+#         3.75,
+#         1.88,
+#         ],
+#     Pepper : [
+#         # For samples Jul 13, 2021 or earlier:
+#         # 58339.995,
+#         # 14584.99875,
+#         # 3646.249688,
+#         # 911.5624219,
+#         # 227.8906055,
+#         # For samples Jul 14, 2021 or later:
+#         # 50203.995,
+#         # 12550.99875,
+#         # 3137.749688,
+#         # 784.4374219,
+#         # 196.1093555,
+#         # For samples Nov 1, 2021 or later:
+#         31026.81,
+#         7756.70,
+#         1939.18,
+#         484.79,
+#         121.20,
+#         ],
+# }
 
 months_mapper: [
     ["Jan", "January"],
@@ -169,12 +152,12 @@ samples_excel: {
                 replace : "",
             },
         ],
-        samples_df : [
-            {
-                pattern : "u_of_o",
-                replace : "uo",
-            },
-        ],
+        # samples_df : [
+        #     {
+        #         pattern : "u_of_o",
+        #         replace : "uo",
+        #     },
+        # ],
     },
 
     sample_location_col : "Sample location",
@@ -186,13 +169,5 @@ samples_excel: {
     ],
 
     # Download a new samples file (if an URL) every this many seconds
-    samples_file_cache_ttl : 600,
-
-    # string_mapper : [
-    #     {
-    #         columns : "Sample location",
-    #         match : "",
-    #         replace : "",
-    #     },
-    # ],
+    samples_file_cache_ttl : 0,
 }
