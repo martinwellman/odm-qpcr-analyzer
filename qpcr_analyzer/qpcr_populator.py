@@ -2114,10 +2114,10 @@ if __name__ == "__main__":
     if "get_ipython" in globals():
         opts = EasyDict({
             # Ottawa B117
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-d3.xlsx",
-            # "template_file" : "qpcr_template_ottawa_b117.xlsx",
-            # "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_b117_diff.yaml"],
-            # "qaqc" : "qaqc_ottawa_b117.yaml",
+            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-jan6.xlsx",
+            "template_file" : "qpcr_template_ottawa_b117.xlsx",
+            "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_b117_diff.yaml"],
+            "qaqc" : "qaqc_ottawa_b117.yaml",
 
             # Ottawa Wide
             # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-dec6.xlsx",
@@ -2127,15 +2127,15 @@ if __name__ == "__main__":
             # "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
 
             # Ottawa Long
-            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-dec26.xlsx",
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
-            "template_file" : "qpcr_template_ottawa.xlsx",
-            "config" : ["qpcr_populator_ottawa.yaml"],
-            "qaqc" : ["qaqc_ottawa.yaml"],
+            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-jan6.xlsx",
+            # # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
+            # "template_file" : "qpcr_template_ottawa.xlsx",
+            # "config" : ["qpcr_populator_ottawa.yaml"],
+            # "qaqc" : ["qaqc_ottawa.yaml"],
 
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/{site_parent_title}/populated - {site_parent_title} - Test.xlsx",
             # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/{parent_site_title}/out-aug9 - {parent_site_title} - {site_id}.xlsx",
-            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/dec26.xlsx",
+            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/jan6.xlsx",
             "hide_qaqc" : False,
             "overwrite" : True,
 

@@ -1,3 +1,49 @@
+qaqc_priorities : [
+    # Highlighting of priorities earlier in this list take precedence (ie. more serious errors should go first)
+    {
+        name : "Highest",
+        fill : "FF0000",
+        font : "000000",
+        bold : True,
+    },
+    {
+        name : "High",
+        fill : "FF7D7D",
+        font : "9E0000",
+        bold : True,
+    },
+    {
+        name : "Medium",
+        fill : "F7CAAC",
+        font : "833C0B",
+        bold : True,
+    },
+    {
+        name : "Medium Low",
+        fill : "FFF2CC",
+        font : "000000",
+        bold : False,
+    },
+    {
+        name : "Low",
+        fill : "D0CECE",
+        font : "3B3838",
+        bold : False,
+    },
+    {
+        name : "Very Low",
+        fill : "D5DCE4",
+        font : "3B3838",
+        bold : False,
+    },
+    {
+        name : "Good",
+        fill : "00CC00",
+        font : "000000",
+        bold : True,
+    },
+]
+
 no_detections : [
     {
         category : "Ct Detection",

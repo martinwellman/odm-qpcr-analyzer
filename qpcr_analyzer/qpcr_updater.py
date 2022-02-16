@@ -154,6 +154,38 @@ class QPCRUpdater(object):
             target_cell.protection = copy(source_cell.protection)
             target_cell.alignment = copy(source_cell.alignment)
         return target_cell
+    
+    def check_valid_inputs(self, input_files):
+        success = []
+        if isinstance(input_files, str):
+            input_files = [input_files]
+            input_is_array = False
+        else:
+            input_is_array = True
+        
+        for input_file in input_files:
+            try:
+                fix_xlsx_file(input_file)
+                wb = openpyxl.load_workbook(input_file)
+            except:
+                success.append(False)
+                continue
+            
+            ws = wb[wb.sheetnames[0]]
+            columns = [(c or "").strip().lower() for c in self.get_columns(ws)]
+
+            # Make sure all of the required columns are present in the input file
+            found_columns = [col for col in self.config.required_source_headers if col.strip().lower() in columns]
+            if len(found_columns) < len(self.config.required_source_headers):
+                missing_columns = list(set(self.config.required_source_headers) - set(found_columns))
+                print(f"Required column(s) {missing_columns} not found in input file {input_file}")
+                success.append(False)
+                continue
+            else:
+                success.append(True)
+                continue
+            
+        return success if input_is_array else success[0]
 
     def update(self, input_files, target_path_template):
         """Do a full update by copying valid input_files to the target files.
@@ -179,23 +211,19 @@ class QPCRUpdater(object):
         success = []
 
         for input_file in input_files:
+            if not self.check_valid_inputs(input_file):
+                success.append(False)
+                continue
+            
             try:
                 fix_xlsx_file(input_file)
                 wb = openpyxl.load_workbook(input_file)
             except:
                 success.append(False)
                 continue
-            # add_excel_calculated_values(wb)
+
             ws = wb[wb.sheetnames[0]]
             columns = [(c or "").strip().lower() for c in self.get_columns(ws)]
-
-            # Make sure all of the required columns are present in the input file
-            found_columns = [col for col in self.config.required_source_headers if col.strip().lower() in columns]
-            if len(found_columns) < len(self.config.required_source_headers):
-                missing_columns = list(set(self.config.required_source_headers) - set(found_columns))
-                print(f"Required column(s) {missing_columns} not found in input file {input_file}")
-                success.append(False)
-                continue
 
             site_col = columns.index(self.config.site_column.strip().lower())
 

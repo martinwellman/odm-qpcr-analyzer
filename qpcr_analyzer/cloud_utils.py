@@ -53,7 +53,6 @@ def get_prefix(file):
     return "" if match is None else match[0].lower()
 
 def prefix_and_domain_and_path(file):
-    proto = ""
     if is_http(file):
         prefix = HTTP_PREFIX
     elif is_https(file):

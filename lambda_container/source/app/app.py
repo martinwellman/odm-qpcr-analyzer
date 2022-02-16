@@ -510,25 +510,30 @@ def handler(event, context):
         populator_template = _download(event.get("populator_template", None) or DEFAULT_POPULATOR_TEMPLATE, "populator template")
 
         local_input_files = []
-        local_updated_input_files = []
+        # local_inputed_output_files is all input files (uploaded by the user) that are actually output files
+        # (eg. in wide format). In this case we do not process these files, but instead append them to the output
+        # on the remote target
+        local_inputed_output_files = []
 
         # Download all input files
         for input_file in input_files:
             local_input_files.append(cloud_utils.download_file(input_file, target_dir=temp_root))
 
-        # Run updater, don't save/upload the results to the remote target yet, we'll do that after the populator
-        # since we also need to update the remote target with the populator's output. We run the updater here
-        # so we can also identify which of the input files are meant to update the remote targets. Those files
-        # are ignored for the extracter and populator.
+        # Get the updater to determine which input files should be used unmodified to append to the remote_targets.
+        # ie. Find the input files that are already in the output format: We will not process these files, instead we will
+        # append each row to the correct remote target output file based on its site ID column.
         updater = None
         if remote_target:
             updater = QPCRUpdater(updater_config, 
                 populator_config, 
                 sites_config=sites_config, 
                 sites_file=sites_file)
-            updated = updater.update(local_input_files, os.path.join(remote_target, populated_output_file))
-            local_updated_input_files = [f for f,updated in zip(local_input_files, updated) if updated]
-            local_input_files = [f for f,updated in zip(local_input_files, updated) if not updated]
+            is_output_files = updater.check_valid_inputs(local_input_files)
+
+            # local_inputed_output_files: Already in the output format, so don't process these
+            # local_input_files: These are real QPCR input files, so we process these
+            local_inputed_output_files = [f for f,is_output in zip(local_input_files, is_output_files) if is_output]
+            local_input_files = [f for f,is_output in zip(local_input_files, is_output_files) if not is_output]
 
         # Run extracter
         output_file = format_file_name(EXTRACTED_FILE, num=0)
@@ -582,7 +587,7 @@ def handler(event, context):
         # Update remote target files on Google Drive with the new output from the populator
         updated_file_urls = []
         if updater is not None:
-            updated = updater.update(populated_files, os.path.join(remote_target, populated_output_file))
+            _ = updater.update(local_inputed_output_files + populated_files, os.path.join(remote_target, populated_output_file))
             updated_targets = updater.save_and_upload()
             for updated_target in updated_targets:
                 file_id = gdrive_utils.drive_get_file_id(cloud_utils.remove_prefix(updated_target))
@@ -608,9 +613,9 @@ def handler(event, context):
         # to the email.
         inputs_zip_file = None
         extracted_zip_file = None
-        if len(local_updated_input_files) > 0 or len(local_input_files) > 0:
+        if len(local_inputed_output_files) > 0 or len(local_input_files) > 0:
             inputs_zip_file = os.path.join(temp_root, "zips", format_file_name(INPUTS_ZIP_FILE))
-            make_zip_file(inputs_zip_file, *local_updated_input_files, *local_input_files)
+            make_zip_file(inputs_zip_file, *local_inputed_output_files, *local_input_files)
             attachments.append(inputs_zip_file)
         if len(raw_files) > 0:
             extracted_zip_file = os.path.join(temp_root, "zips", format_file_name(EXTRACTED_ZIP_FILE))
@@ -628,7 +633,7 @@ def handler(event, context):
         if to_emails is not None and to_emails != "" and not DISABLE_ALL_EMAILS:
             template_params = {
                 "report_files" : [os.path.basename(f) for f in populated_files],
-                "input_files" : [os.path.basename(f) for f in local_input_files + local_updated_input_files],
+                "input_files" : [os.path.basename(f) for f in local_input_files + local_inputed_output_files],
                 "raw_files" : [os.path.basename(f) for f in raw_files],
                 "settings" : settings,
                 "updated_files" : updated_file_urls,

@@ -858,10 +858,12 @@ if __name__ == "__main__":
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec1-error/qPCR-2021-11-30 N1 N2 redo H 11.25 VC211.29 HD 11.26-11.28  -  Quantification Cq Results.xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec1-error/qPCR-2021-11-30 PEPPER O 11.29 H 11.25-28 VC 11.29 HD 11.26-28_All Wells -  Quantification Cq Results.xlsx"
 
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 N2 O 12.21 UO 12.21 SV 12.21R_All Wells -  Quantification Cq Results.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 OMICRON O 12.21 UO 12.21 SV 12.21_All Wells -  Quantification Cq Results.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_N2_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_Pepper_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 N2 O 12.21 UO 12.21 SV 12.21R_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22 N1 OMICRON O 12.21 UO 12.21 SV 12.21_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_N2_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
+                # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/dec26-error/qPCR-2021-12-22_Pepper_O 12.21 UO_NA 12.21 UO_FT 12.21 UO_ST 12.21  Stitt 12.21_All Wells -  Quantification Cq Results.xlsx",
+                
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/Tyson/2021-05-06_B117 VARIANT_9 SAMPLES.pltd.pdf.xlsx",
             ],
 
             "samples" : "<samples path here>",
@@ -871,7 +873,7 @@ if __name__ == "__main__":
 
             "output_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/extracted",
             "config" : "qpcr_extracter_ottawa.yaml",
-            "output_file" : "merged-dec26.xlsx",
+            "output_file" : "merged-jan6.xlsx",
             "upload_to" : "", #"s3://odm-qpcr-analyzer/extracted/",
             "save_raw" : True,
             "overwrite" : True,
