@@ -12,7 +12,7 @@ The ODM QPCR Analyzer has 3 main components:
 
 1. The QPCR Analyzer itself, where most of the code resides. See [qpcr_analyzer](qpcr_analyzer) for details.
 1. The Lambda Container, which contains all code for building and running the analyzer as an AWS Lambda Function in the cloud. See [lambda_container](lambda_container) for details.
-1. A sample QPCR Analyzer website that allows users to upload PDFs and execute the Lambda Function. See [qpcr_analyzer_website](qpcr_analyzer_website) for details.
+1. A Plotly Dash-based website that allows users to upload QPCR data files and execute the Lambda Function. See [odm-qpcr-analyzer-dash](https://github.com/martinwellman/odm-qpcr-analyzer-dash) for details (the repo is currently private).
 
 ## Installation
 
@@ -33,7 +33,5 @@ For a more complete example, including options for emailing the reports and upda
 
 ## TODO
 
-- Split off all code that handles sample IDs to a separate class (to make it easier to deal with differences in sample ID naming between labs).
-- Work with samples file in a more OOP way.
 - Finish [ODM QPCR Analyzer Manual and Spec.docx](ODM%20QPCR%20Analyzer%20Manual%20and%20Spec.docx).
 - Get rid of [localfixes.sh](qpcr_analyzer/localfixes.sh), move the changes/fixes to separate GitHub repos for OpenPYXL and Ghostscript.
