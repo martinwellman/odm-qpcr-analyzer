@@ -1,6 +1,0 @@
-{
-    "require": {
-        "aws/aws-sdk-php": "^3.185",
-        "google/apiclient": "^2.10"
-    }
-}
