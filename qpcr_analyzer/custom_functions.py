@@ -59,10 +59,10 @@ CUSTOM_FUNCS = {
         "func" : "custom_func_select",
         "bind" : -21,
     },
-    "__GETDATA" : {
-        "func" : "custom_func_getdata",
-        "bind" : -1,
-    },
+    # "__GETDATA" : {
+    #     "func" : "custom_func_getdata",
+    #     "bind" : -1,
+    # },
     "__ADDROWID" : {
         "func" : "custom_func_addrowid",
         "bind" : 1,
@@ -407,33 +407,33 @@ def custom_func_unquotify(populator, value, only_if_number=False, **kwargs):
             return f'"{value}"'
     return number_value
 
-def custom_func_getdata(populator, cell_addr, id, format=None, **kwargs):
-    """Get the values in the attached_data of the cell.
+# def custom_func_getdata(populator, cell_addr, id, format=None, **kwargs):
+#     """Get the values in the attached_data of the cell.
 
-    Parameters
-    ----------
-    cell_addr : str
-        The cell address to get the data of.
-    id : str
-        The column(s) to get the values from. We find the first attached_data that has each of the columns
-        and get the value from it. To retrieve multiple columns separate the columns with a semi-colon.
-    format : str
-        An optional string format tag. If None then we return all values in id, joined with semi-colons.
-        If not null, then we return format.format(*all_values). ie. {0} is replaced with the value
-        found for id[0], {1} for id[1], etc.
-    """
-    target_sheet_name = kwargs.get("target_sheet_name", None)
-    ws, info = populator.get_worksheet_and_info(target_sheet_name)
-    cell = ws[cell_addr]
-    # attached_data = populator.get_cell_attached_data(cell)
+#     Parameters
+#     ----------
+#     cell_addr : str
+#         The cell address to get the data of.
+#     id : str
+#         The column(s) to get the values from. We find the first attached_data that has each of the columns
+#         and get the value from it. To retrieve multiple columns separate the columns with a semi-colon.
+#     format : str
+#         An optional string format tag. If None then we return all values in id, joined with semi-colons.
+#         If not null, then we return format.format(*all_values). ie. {0} is replaced with the value
+#         found for id[0], {1} for id[1], etc.
+#     """
+#     target_sheet_name = kwargs.get("target_sheet_name", None)
+#     ws, info = populator.get_worksheet_and_info(target_sheet_name)
+#     cell = ws[cell_addr]
+#     # attached_data = populator.get_cell_attached_data(cell)
 
-    all_ids = [x.strip() for x in id.split(";")]
-    all_values = []
-    for idx, cur_id in enumerate(all_ids):
-        val = populator.get_cell_attached_data_value(cell, cur_id, "")
-        all_values.append(val)
+#     all_ids = [x.strip() for x in id.split(";")]
+#     all_values = []
+#     for idx, cur_id in enumerate(all_ids):
+#         val = populator.get_cell_attached_data_value(cell, cur_id, "")
+#         all_values.append(val)
     
-    if format is None:
-        return ";".join([str(a) for a in all_values])
+#     if format is None:
+#         return ";".join([str(a) for a in all_values])
 
-    return format.format(*all_values)
+#     return format.format(*all_values)
