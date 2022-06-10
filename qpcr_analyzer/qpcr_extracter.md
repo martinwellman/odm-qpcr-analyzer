@@ -1,19 +1,18 @@
 # qpcr_extracter.py
 
-The QPCRExtracter class receives BioRad input files (either in PDF or XLSX format), extracts the data quantification table, joins the table with some additional data (such as sample extraction mass, sample date, etc.), and saves the results in an Excel file ready for the BioRadMapper to convert it to ODM format.
+The QPCRExtracter class receives input files (either in PDF or XLSX format) from a QPCR machine, extracts the data quantification table, and saves the results in an Excel file ready for the QPCRPopulator.
 
 More details will be made available here shortly.
 
 ## Usage
 
-    extracter = QPCRExtracter(local_input_files,    # list of BioRad PDF/Excel files
-        output_file,                                # All extracted data are merged into this Excel file.
-        output_dir,
-        samples_file, 
-        "qpcr_extracter_ottawa.yaml", 
-        sites_config="sites.yaml",
-        sites_file="sites.xlsx",
-        upload_to=None, 
-        overwrite=True,
-        save_raw=True)
-    local_input_files, extracted_files, raw_files, upload_files = extracter.extract()
+    extracter = QPCRExtracter(config,       # Main Extracter config file
+        format_configs)                     # Array of configs that specify the input file layout
+
+    # merged_extracted_file is the main output to be sent to QPCRPopulator.
+    # extracted_files are the individual extracted files, one for each of input_files (will be None at indices
+    #   where the input_file could not be extracted).
+    # raw_files are the raw versions of the input_files in Excel format. These are the unmodified extracted tables before
+    #   any further processing is performed (ie. before the extracted_files are created).
+    merged_extracted_file, extracted_files, raw_files = extracter.extract(input_files, output_dir, raw_dir)
+

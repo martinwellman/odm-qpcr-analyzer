@@ -3,11 +3,15 @@
 # %autoreload 2
 
 """
-qpcr_populator.py
-=================
+# qpcr_populator.py
 
-See qpcr_populator.md
+See [qpcr_populator.md](qpcr_populator.md).
 """
+
+# This is required for the OpenPYXL changes made by localfixes.sh, since we only
+# made the fixes for saving the XLSX file with the etree rather than LXML.
+import os
+os.environ["OPENPYXL_LXML"] = "False"
 
 from easydict import EasyDict
 from copy import copy, deepcopy
@@ -19,7 +23,7 @@ import math
 import cloud_utils
 import argparse
 
-from datetime import datetime
+from datetime import datetime, date
 
 from excel_calculator import add_excel_calculated_values
 import logging
@@ -44,16 +48,17 @@ from qpcr_qaqc import (
 # pd.set_option('mode.chained_assignment', "raise")
 
 from qpcr_sites import QPCRSites
-from fix_xlsx import fix_xlsx_file
+from qpcr_sampleids import QPCRSampleIDs
+from qpcr_sampleslog import QPCRSamplesLog
+from qpcr_methods import QPCRMethods
+from excel_file_utils import fix_xlsx_file
 from qpcr_utils import (
     OUTLIER_COL,
     MAIN_SHEET,
     SINGLE_CAL_SHEET,
     CAL_SHEET_FMT,
-    INDEX_KEY,
     MAIN_ROW_DATA,
     CAL_ROW_DATA,
-    PARSE_VALUES_REGEX,
     points_to_cm,
     estimated_cm_to_chars,
     add_sheet_name_to_colrow_name,
@@ -74,7 +79,7 @@ from custom_functions import (
 )
 
 class QPCRPopulator(object):
-    def __init__(self, input_file, template_file, target_file, overwrite, config_file, qaqc_config_file, sites_config, sites_file, hide_qaqc=False):
+    def __init__(self, input_file, template_file, target_file, overwrite, config_file, qaqc_config_file, sites_config, sites_file, sampleids_config, sampleslog_config, sampleslog_file, methods_config, methods_file, hide_qaqc=False):
         super().__init__()
         self.hide_qaqc = hide_qaqc
         self.input_file = input_file
@@ -86,12 +91,15 @@ class QPCRPopulator(object):
         # self.qaqc_config_file = qaqc_config_file if qaqc_config_file is None or isinstance(qaqc_config_file, (list, tuple, np.ndarray)) else [qaqc_config_file]
         self.worksheets_info = []
         self.late_binders = []
-        self.format_args = {}
+        self.row_data = {}
 
         self.config = load_config(self.config_file)
         self.qaqc = QPCRQAQC(self, qaqc_config_file, config_file)
 
         self.sites = QPCRSites(sites_config, sites_file)
+        self.sampleids = QPCRSampleIDs(sampleids_config, sites_config, sites_file)
+        self.sampleslog = QPCRSamplesLog(sampleslog_config, sampleslog_file, sampleids_config, sites_config, sites_file)
+        self.methods = QPCRMethods(methods_config, methods_file)
 
     def get_column_names(self, sheet_name, col_id):
         """Get all the names (eg. "main_col_ct") attached to the specified Excel column (eg. "AB") in the specified sheet.
@@ -437,147 +445,8 @@ class QPCRPopulator(object):
             all.append((info["ws"], info))
         return all
 
-    def add_array_values(self, kwargs, name, values, outliers=None, data=None):
-        """Add values to the specified kwargs dictionary for different tags that the parser recognizes. These are the values in the
-        template file that are in curly braces, such as {value_covn1_0} (in this case, we would set the key "value_covn1_0").
 
-        For each row that the parser encounters it populates kwargs with multiple calls to add_array_values. The names
-        of the tags are specified by the name parameter described below.
-
-        Parameters
-        ----------
-        kwargs : dict
-            Dictionary with all the tag names as keys (without the curly braces), and the values being the values to replace the tag with.
-            If data is provided, then the values are dictionaries instead. These dictionaries have keys "value" (the actual value to
-            replace the tag with), "data" (array of pd.DataFrame rows from WWMeasure associated with the value), and "re_match" (the
-            compiled regular expression that will find the tag in a string). The "data" key allows us to add the pd.DataFrame rows from WWMeasure
-            to any cell that we match.
-        name : str
-            The root name for the values to add. We use this string name and add a trailing _# for each value in values.
-            (eg. "value_covn1" for name would map to "value_covn1_0" for the first value in values, then "value_covn2_1", etc)
-            We also add the average, as "name_avg" (eg. "value_covn1_avg").
-        values : pd.Series | list | tuple | np.ndarray
-            All the values to add to kwargs. These are all cast to floats. If it can't cast to a float then None is used.
-        outliers : pd.Series | list | tuple | np.ndarray
-            For any element in this that is not N/A (ie. has pd.isna() False), then we use this value instead of the one
-            with the matching index in values. We also enclose the value in square brackets, and will represent an outlier in the
-            output.
-        data : pd.DataFrame
-            All pd.DataFrame rows from the WWMeasure dataframe associated with the values. There should be one row
-            per value. If the parser matches any of the tags we add, then it will also add the corresponding row in data
-            to the cell's attached_data array.
-        """
-        if isinstance(values, pd.Series):
-            values = values.tolist()
-        values = list(values)
-        if isinstance(outliers, pd.Series):
-            outliers = list(outliers)
-        outliers = list(outliers) if outliers is not None else None
-
-        # df = pd.DataFrame(columns=["val", "group"])
-        df = pd.DataFrame(columns=["val"])
-        for i in range(len(values)):
-            # Add the value, or instead add the outlier if it exists
-            val = "" if i >= len(values) else (values[i] if outliers is None or pd.isna(outliers[i]) else f'[{outliers[i]}]')
-            cur_data = None if data is None or i >= len(data.index) else data.iloc[i]
-
-            # Try to convert to float, use None if it can't be converted
-            try:
-                float_val = None
-                float_val = float(val)
-            except:
-                pass
-            df = df.append({"val" : float_val}, ignore_index=True)
-            cur_key = f"{name}_{i}"
-            self.add_format_args(kwargs, cur_key, val, cur_data)
-
-        # Add the average
-        self.add_format_args(kwargs, f"{name}_avg", df["val"].mean(), data)
-
-    def add_format_args(self, kwargs, key, value, data=None):
-        """Add a single tag value to kwargs. These are the tags the parser looks for in curly braces, such
-        as "value_covn1_1".
-
-        The newly added value is at kwargs[key]. The value of that member is either value (if data is None), or it
-        is a dict, where the dict's "value" is value, "data" is [data], and "re_match" is a compiled regular
-        expression that matches the tag.
-
-        Parameters
-        ----------
-        kwargs : dict
-            The dictionary containing all tags added so far. The keys are the tags, excluding the curly braces.
-        key : str
-            The key to set in kwargs.
-        value : any
-            The value to add (eg. a float, int, str, etc)
-        data : pd.Series
-            An optional row, from the WWMeasure pd.DataFrame, to associate with the newly added tag. If the
-            parser encounters the tag, it will also attach this row to the cell's attached_data member.
-        """
-        if data is None:
-            kwargs[key] = value if value is not None else "" # if (isinstance(val, str) or val >= 0) else ""
-        else:
-            kwargs[key] = {
-                "value" : value,
-                "data" : [data],
-                "re_match" : re.compile(PARSE_VALUES_REGEX % key, flags=re.IGNORECASE),
-            }
-
-    def remove_lab_id_from_sample_id(self, sample_id):
-        """Remove the lab ID from the specified sample ID. The lab ID is in the WWMeasure sheet sample IDs, and
-        we typically want to remove it for all internal purposes, as well as for populating any output Excel files
-        with sample IDs (it looks nicer and less cluttered without the lab ID).
-
-        eg. the lab ID "ottawa_lab-o.08.23.21" would map to "o.08.23.21"
-        """
-        return re.sub(f"^{self.config.input.lab_id}{self.config.input.lab_id_separator}", "", sample_id)
-
-    def populate_format_args(self, data, other_data=None, index=None):
-        """Populate all the format args (ie. the tags in curly braces that the parser detects), for the current row.
-
-        Parameters
-        ----------
-        data : pd.DataFrame
-            The data to retrieve values from. This is typically all replicates of a sample, taken from the WWMeasure table.
-        other_data : dict
-            Additional data to retrieve values from. The values added from here are named "value_{key}_#" where
-            {key} is the dictionary's keys, and the value given are the values in the self.config.input.value_col column.
-        index : int
-            The index number which is the number of data rows we have so far processed. eg. if we're populating by sample ID,
-            the first sample ID (ie. first row), will have index 0, the second sample ID on the next row will have index 1, etc.
-            When the parser encounters the index tag (#), it replaces it with this.
-        """
-        if data is None or len(data.index) == 0:
-            self.format_args = {}
-            return
-        first = data.iloc[0]
-
-        format_args = {}
-        self.add_format_args(format_args, "analysisDate", first[self.config.input.analysis_date_col], first)
-        self.add_format_args(format_args, "sampleDate", first[f"{self.config.input.sample_sheet_name}_{self.config.input.sample_date_col}"], first)
-        self.add_format_args(format_args, "siteID", (first[f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"] or "").replace(f"{self.config.input.lab_id}{self.config.input.lab_id_separator}", ""), first)
-        self.add_format_args(format_args, "sampleID", self.remove_lab_id_from_sample_id(first[self.config.input.sample_id_col]), first)
-        self.add_format_args(format_args, "plateID", first[self.config.input.plate_id_col], first)
-        self.add_format_args(format_args, "type", first[self.config.input.gene_type_col], first)
-        self.add_format_args(format_args, INDEX_KEY, str(index) if index is not None else "")
-
-        # Add the main values: value_0, value_1, value_2, ...
-        self.add_array_values(format_args, "value", data[self.config.input.value_col], outliers=data[OUTLIER_COL], data=data)
-        # Also add values with gene name: value_covn1_0, value_convn2_0, etc.
-        gene_groups = data.groupby(self.config.input.gene_type_col)
-        for gene_name, gene_group in gene_groups:
-            gene_name = gene_name.lower()
-            self.add_array_values(format_args, f"value_{gene_name}", gene_group[self.config.input.value_col], outliers=gene_group[OUTLIER_COL], data=gene_group)
-            # format_args[f"plateID_{gene_name}"] = gene_group[self.config.input.plate_id_col].iloc[0]
-        if other_data is not None:
-            # Add the other_data: eg. value_bl_0, value_bl_1, ...
-            for key, info in other_data.items():
-                d = info["data"]
-                self.add_array_values(format_args, f"value_{key}", d[self.config.input.value_col], outliers=d[OUTLIER_COL], data=d)
-
-        self.format_args = format_args
-
-    def parse_cell(self, cell, target_cell, data, target_sheet_name, other_data=None):
+    def parse_cell(self, cell, target_cell, data, target_sheet_name):
         """Parse a cell from the template. We'll find all tags in curly braces and replace them with values. We also
         find all custom functions (that begin with __), and either call that function immediately or add
         it as a late binder that we'll call later.
@@ -594,8 +463,6 @@ class QPCRPopulator(object):
         target_sheet_name : str
             The name of the target sheet for the target_cell. This is the name in the "sheet_name" member of
             the worksheet, in our worksheets_info member.
-        other_data : dict
-            Additional data that accompanies the data. See populate_format_args and add_array_values.
         """
         if data is None:
             # return cell.value, None
@@ -604,7 +471,7 @@ class QPCRPopulator(object):
         v = cell.value
         attached_data = []
         try:
-            v, attached_data = parse_values(v, **self.format_args)
+            v, attached_data = parse_values(v, self.row_data)
         except Exception as e:
             v = str(e)            
 
@@ -678,7 +545,7 @@ class QPCRPopulator(object):
         """
         if not isinstance(v, str):
             return False, v, start_pos
-        match_func_name = func_name or "__[A-Za-z0-9_]*"
+        match_func_name = func_name or "__[A-Za-z][A-Za-z0-9_]*"
         _match = re.search(CUSTOM_FUNCS_REGEX % (match_func_name), v[start_pos:])
         if _match is None:
             return False, v, start_pos
@@ -686,19 +553,19 @@ class QPCRPopulator(object):
         groups = list(_match.groups())
         func_name = groups[1]
         args = [strip_quotes(v).strip() for v in groups[2].split(",")]
-        next_pos = _match.start() + (1 if len(groups[0]) > 0 else 1) + start_pos
+        next_pos = _match.start() + (1 if groups[0] and len(groups[0]) > 0 else 1) + start_pos
 
         try:
             replace = ""
             funcinfo = CUSTOM_FUNCS[func_name] if func_name in CUSTOM_FUNCS else None 
             match_str = full_match
-            if len(groups[0]) > 0 and groups[0][0] != CUSTOM_FUNC_SEP:
+            if groups[0] and len(groups[0]) > 0 and groups[0][0] != CUSTOM_FUNC_SEP:
                 match_str = match_str[1:]
 
             if funcinfo is not None and delay_late_binders and funcinfo["bind"] != 0:
                 # We use target_cell for the source_cell parameter (instead of cell), since by the time the late binder is called the template will be
                 # target_cell (which receives the contents of the template_cell from a call to copy_cell)
-                self.add_late_binder(target_cell, target_cell, "UNK_SHEET!", funcinfo["bind"], target_sheet_name, data, func_name, self.format_args, args)
+                self.add_late_binder(target_cell, target_cell, "UNK_SHEET!", funcinfo["bind"], target_sheet_name, data, func_name, self.row_data, args)
             else:
                 if funcinfo is not None:
                     replace = getattr(custom_functions, funcinfo["func"])(self, *args, template_cell=cell, target_cell=target_cell, target_sheet_name=target_sheet_name)
@@ -737,7 +604,7 @@ class QPCRPopulator(object):
         """
         self.late_binders.sort(key=lambda x: abs(x["bind"]))
         prev_data = None
-        init_format_args = self.format_args
+        init_row_data = self.row_data
         for late_binder in self.late_binders:
             if (inner and late_binder["bind"] < 0) or (not inner and late_binder["bind"] > 0):
                 continue
@@ -745,20 +612,20 @@ class QPCRPopulator(object):
             target_cell = late_binder["target_cell"]
             target_sheet_name = late_binder["target_sheet_name"]
             func_name = late_binder["func_name"]
-            format_args = late_binder["format_args"]
+            row_data = late_binder["row_data"]
             data = late_binder["data"]
-            self.format_args = format_args
+            self.row_data = row_data
 
             ran, v, next_pos = self.run_custom_func(target_cell.value, 0, source_cell, target_cell, data, target_sheet_name, func_name, False)
             if ran:
                 target_cell.value = self.try_to_cast(target_cell, v)
             
-        self.format_args = init_format_args
+        self.row_data = init_row_data
 
         # self.late_binders = []
         self.late_binders = [b for b in self.late_binders if (inner and b["bind"] < 0) or (not inner and b["bind"] > 0)]
 
-    def add_late_binder(self, source_cell, target_cell, sheet_name, bind, target_sheet_name, data, func_name, format_args, args):
+    def add_late_binder(self, source_cell, target_cell, sheet_name, bind, target_sheet_name, data, func_name, row_data, args):
         """Add a late binder, which is a custom Excel function (specified in CUSTOM_FUNCS) with bind != 1 that will be called
         only after populating the full output sheet from the template file.
         """
@@ -769,12 +636,31 @@ class QPCRPopulator(object):
             "sheet_name" : sheet_name,
             "target_sheet_name" : target_sheet_name,
             "func_name" : func_name,
-            "format_args" : deepcopy(format_args),
+            "row_data" : deepcopy(row_data),
             "args" : deepcopy(args),
             "data" : data,
         })
+        
+    def set_row_data(self, data):
+        """Add data for parsing the current row. The values in the data can be referenced in the template spreadsheet in
+        tags (ie. values in curly braces).
+        
+        Args:
+            data (dict): Dictionary of all data. The format is:
+                    "mainTarget" : {
+                        "sample" : sample_df,       # Contains sample data such as ID, target, settled solids, total mass, etc.
+                        "qpcr" : qpcr_df,           # Contains qpcr data such as ct_0, ct_1, ct_2
+                        "..." : ...,
+                    },
+                    "otherTargetA" : {
+                        ...
+                    }
+                The values (sample_df, qpcr_df) are usually pd.DataFrames, but can be scalars as well. To specify the ct_0 value
+                for mainTarget, the tag in the template would be {mainTarget>qpcr>ct_0}.                
+        """
+        self.row_data = data.copy()
 
-    def copy_to_position(self, source_ws, source_row, target_sheet_name, data, other_data=None, target_row=None, target_col=None, row_name=None, index=None):
+    def copy_to_position(self, source_ws, source_row, target_sheet_name, data, target_row=None, target_col=None, row_name=None):
         """Copy the specified row from the template source_ws to the end of the target sheet.
 
         Parameters
@@ -789,19 +675,12 @@ class QPCRPopulator(object):
             The sheet name is the one defined in our "sheet_name" member of the worksheets_info dictionaries.
         data : pd.DataFrame
             The data for the row, from WWMeasure.
-        other_data : pd.DataFrame
-            Additioinal data for the row, such as the extracted mass for the data. These are also rows in WWMeasure for the sample ID, but
-            with different unit or unitOther values other than the main "Ct", "Ct_NTC", "Ct_EB" units.
         target_row : int
             The 1-based target row to copy to. If None then the next empty row is used.
         target_col : int
             The 1-based target column to copy to. If None then column 1 is used.
         row_name : str
             A row name to associate with the new row.
-        index : int
-            The index number for the current row, in the row group. eg. If we're copying all rows named main_row_data, then
-            the first time we copy the row (for a specific sample ID in the ODM), the index will be 0. Additional rows for each
-            subsequent sample ID will have index incremented by 1 for each new row.
 
         Returns
         -------
@@ -816,9 +695,6 @@ class QPCRPopulator(object):
         if target_col is None:
             target_col = 1
 
-        self.populate_format_args(data, other_data=other_data, index=index)
-
-        # target_row = target_ws.max_row
         rows = [source_row]
 
         max_col = target_col
@@ -864,7 +740,7 @@ class QPCRPopulator(object):
                 target_addr = "{}{}".format(get_column_letter(cur_cell_col), cur_cell_row)
                 target_cell = target_ws[target_addr]
                 if isinstance(target_cell, Cell):
-                    results = self.parse_cell(cell, target_cell, data, target_sheet_name, other_data=other_data)
+                    results = self.parse_cell(cell, target_cell, data, target_sheet_name)
 
             # Merge cells in row
             if len(row_merged_col_ranges) > 0:
@@ -911,7 +787,7 @@ class QPCRPopulator(object):
         columns = [c.value for c in ws[f"B2:{max_col}2"][0]]
         return columns
 
-    def copy_rows(self, template_ws, row_ids, target_sheet_name, data, other_data=None, target_row=None, target_col=None, index=None):
+    def copy_rows(self, template_ws, row_ids, target_sheet_name, data, target_row=None, target_col=None):
         """Copy all rows from the template worksheet, with a row id/name in row_ids, to the target output worksheet, for a single
         set of data (typically from the same sample ID).
 
@@ -927,16 +803,10 @@ class QPCRPopulator(object):
         data : pd.DataFrame
             The rows in WWMeasure associated with the current set of template rows we're copying. This is typically all the Ct
             data for the current sample ID.
-        other_data : pd.DataFrame
-            Additional rows in WWMeasure associated with the current sample ID. These are non Ct values such as extracted mass.
         target_row : int
             The 1-based target row to copy to. If None then the next empty row is used.
         target_col : int
             The 1-based target column to copy to. If None then column 1 is used.
-        index : int
-            The index number for the current row, in the row group. eg. If we're copying all rows named main_row_data, then
-            the first time we copy the row (for a specific sample ID in the ODM), the index will be 0. Additional rows for each
-            subsequent sample ID will have index incremented by 1 for each new row.
 
         Returns
         -------
@@ -962,7 +832,7 @@ class QPCRPopulator(object):
             # Column A in the template contains the names for the row.
             cur_id = add_sheet_name_to_colrow_name(target_sheet_name, (row[0].value or "").strip().lower())
             if cur_id in row_ids:
-                (last_row, last_col) = self.copy_to_position(template_ws, row[1:], target_sheet_name, data, other_data=other_data, target_row=target_row, target_col=target_col, row_name=row[0].value, index=index)
+                (last_row, last_col) = self.copy_to_position(template_ws, row[1:], target_sheet_name, data, target_row=target_row, target_col=target_col, row_name=row[0].value)
                 target_row = last_row
                 max_col = max(max_col, last_col)
 
@@ -1033,16 +903,16 @@ class QPCRPopulator(object):
 
         return ws, origin, extents
 
-    def get_all_paired_cal_sheets(self, gene_a, gene_b, no_qaqc_only=True):
-        """Get all calibration curve sheets where one curve is for gene_a and the other for
-        gene_b.
+    def get_all_paired_cal_sheets(self, target_a, target_b, no_qaqc_only=True):
+        """Get all calibration curve sheets where one curve is for target_a and the other for
+        target_b.
 
         Parameters
         ----------
-        gene_a : str
-            The first gene to retrieve.
-        gene_b : str
-            The second gene to retrieve, that we'll pair each curve from gene_a with.
+        target_a : str
+            The first target to retrieve.
+        target_b : str
+            The second target to retrieve, that we'll pair each curve from target_a with.
         no_qaqc_only : bool
             If True, then only retrieve curves where QAQC has not yet been performed. These
             are the sheets where the worksheets_info object has "ran_qaqc" set to False.
@@ -1050,42 +920,42 @@ class QPCRPopulator(object):
         Returns
         -------
         list[tuple(dict, dict)]
-            List of all paired sheets. The first item in each tuple is the sheet with gene_a, the second the sheet with gene_b.
+            List of all paired sheets. The first item in each tuple is the sheet with target_a, the second the sheet with target_b.
             These sheets will typically be on the same plate, and can be used to compare the two calibration curves.
         """
         pairs = []
 
-        # Get all sheets for gene_a and gene_b.
-        gene_a_sheets = self.get_cal_sheets_by_gene(gene_a, no_qaqc_only=no_qaqc_only)
-        gene_b_sheets = self.get_cal_sheets_by_gene(gene_b, no_qaqc_only=no_qaqc_only)
-        if len(gene_a_sheets) == 0 or len(gene_b_sheets) == 0:
+        # Get all sheets for target_a and target_b.
+        target_a_sheets = self.get_cal_sheets_by_target(target_a, no_qaqc_only=no_qaqc_only)
+        target_b_sheets = self.get_cal_sheets_by_target(target_b, no_qaqc_only=no_qaqc_only)
+        if len(target_a_sheets) == 0 or len(target_b_sheets) == 0:
             return pairs
 
-        # Go through all gene_a sheets. Find a paired gene_b sheet on the same plate if possible.
-        # If there is no gene_b curve on the same plate, then pair by matching the index into
-        # gene_a_sheets and gene_b_sheets
-        for idx_a, sheet_a in enumerate(gene_a_sheets):
+        # Go through all target_a sheets. Find a paired target_b sheet on the same plate if possible.
+        # If there is no target_b curve on the same plate, then pair by matching the index into
+        # target_a_sheets and target_b_sheets
+        for idx_a, sheet_a in enumerate(target_a_sheets):
             match_sheet_b = None
-            # Go through each of gene_b_sheets, find a matching plateID
-            for sheet_b in gene_b_sheets:
+            # Go through each of target_b_sheets, find a matching plateID
+            for sheet_b in target_b_sheets:
                 if sheet_b["plateID"] == sheet_a["plateID"]:
                     match_sheet_b = sheet_b
                     break
             if match_sheet_b == None:
-                # No gene_b curve with the same plateID, so instead pair by index into gene_a_sheets and
-                # gene_b_sheets
-                match_sheet_b = gene_b_sheets[min(idx_a, len(gene_b_sheets)-1)]
+                # No target_b curve with the same plateID, so instead pair by index into target_a_sheets and
+                # target_b_sheets
+                match_sheet_b = target_b_sheets[min(idx_a, len(target_b_sheets)-1)]
             if match_sheet_b is not None:
                 pairs.append((sheet_a, match_sheet_b))
         return pairs
 
-    def get_cal_sheets_by_gene(self, gene, no_qaqc_only=True):
-        """Get all calibration curve sheets with the specified gene.
+    def get_cal_sheets_by_target(self, target, no_qaqc_only=True):
+        """Get all calibration curve sheets with the specified target.
 
         Parameters
         ----------
-        gene : str
-            The gene to get all calibration curves for.
+        target : str
+            The target to get all calibration curves for.
         no_qaqc_only : bool
             If True, then only retrieve curves where QAQC has not yet been performed. These
             are the sheets where the worksheets_info object has "ran_qaqc" set to False.
@@ -1093,12 +963,12 @@ class QPCRPopulator(object):
         Returns
         -------
         list[dict]
-            List of all calibration sheets info, for all sheets for the specified gene.
+            List of all calibration sheets info, for all sheets for the specified target.
         """
-        gene = gene.lower()
+        target = target.lower()
         sheets = []
         for info in self.worksheets_info:
-            if info["sheet_name"] != MAIN_SHEET and info["gene"].lower() == gene:
+            if info["sheet_name"] != MAIN_SHEET and info["target"].lower() == target:
                 if (no_qaqc_only and not info["ran_qaqc"]) or not no_qaqc_only:
                     sheets.append(info)
         return sheets
@@ -1118,16 +988,16 @@ class QPCRPopulator(object):
 
         col_names, row_names = get_template_colrow_names(template_cal)
 
-        # Retrieve all Std measurements, split into groups by gene type (eg. N1, N2, Pepper)
-        std_data = data[data[self.config.input.unit_other_col] == "Ct_Std"]
+        # Retrieve all Std measurements, split into groups by target type (eg. N1, N2, Pepper)
+        std_data = data[data[self.config.input.measure_type_col] == self.config.input.measure_type_std]
         std_data = std_data.sort_values(self.config.input.index_col)
-        sq_data = data[data[self.config.input.unit_other_col] == "SQ"]
+        sq_data = std_data #data[data[self.config.input.measure_type_col] == "SQ"]
         # We will iterate over each data row in the order of the unique sample IDs in
         # sq_data. Within each sample ID, we will go from largest SQ value (copies/well) to
         # smallest.
-        sq_data = sq_data.sort_values(self.config.input.value_col, ascending=False)
-        gene_names = [n for n in sq_data[self.config.input.gene_type_col].unique() if n]
-        gene_names.sort()
+        sq_data = sq_data.sort_values(self.config.input.sq_col, ascending=False)
+        target_names = [n for n in std_data[self.config.input.target_col].unique() if n]
+        target_names.sort()
 
         calibration_location = self.config.template.calibration_location
         cal_origin = self.config.template.cal_origin
@@ -1141,7 +1011,7 @@ class QPCRPopulator(object):
             # Note: will readd cal_origin later on
             first_row = origin[0]
             target_col = origin[1]
-        elif calibration_location == "calgene_sheet":
+        elif calibration_location == "caltarget_sheet":
             # Use multiple extra sheets for each separate calibration (1 calibration/sheet)
             first_row = cal_origin[0]
             target_col = cal_origin[1]
@@ -1150,22 +1020,24 @@ class QPCRPopulator(object):
         # first_row += cal_origin[0] - 1
         # target_col += cal_origin[1] - 1
 
-        # Go through all genes that have calibration curve data.
-        for idx, (gene_name, gene_df) in enumerate(std_data.groupby(self.config.input.gene_type_col)):
-            for plate_id, plate_df in gene_df.groupby(self.config.input.plate_id_col):
-                # cur_std_data = std_data[std_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()]
-                # cur_sq_data = sq_data[sq_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()]
+        # Go through all targets that have calibration curve data.
+        for idx, (target_name, target_df) in enumerate(std_data.groupby(self.config.input.target_col)):
+            for plate_id, plate_df in target_df.groupby(self.config.input.plate_id_col):
+                row_data_kwargs = {
+                    "plateID" : plate_id,
+                }
+                
+                # cur_std_data = std_data[std_data[self.config.input.target_type_col].str.lower() == target_name.lower()]
+                # cur_sq_data = sq_data[sq_data[self.config.input.target_type_col].str.lower() == target_name.lower()]
                 cur_std_data = plate_df
-                cur_sq_data = sq_data[(sq_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()) & (sq_data[self.config.input.plate_id_col] == plate_id)]
+                cur_sq_data = sq_data[(sq_data[self.config.input.target_col].str.lower() == target_name.lower()) & (sq_data[self.config.input.plate_id_col] == plate_id)]
 
                 if len(cur_std_data.index) == 0:
                     continue
 
-                ws_title = self.get_standard_curve_id(gene=gene_name, plateID=plate_id)
+                ws_title = self.get_standard_curve_id(target=target_name, plateID=plate_id)
 
-                other_data = self.prepare_other_data(data, None, gene_name)
-
-                if calibration_location == "calgene_sheet":
+                if calibration_location == "caltarget_sheet":
                     ws, origin, extents = self.get_or_create_sheet(ws_title, self.config.template.cal_origin, self.config.template.rows_between_cal_groups)
                     first_row = origin[0]
                     target_col = origin[1]
@@ -1183,18 +1055,21 @@ class QPCRPopulator(object):
                         "col_names" : cur_col_names,
                         "row_names" : cur_row_names,
                         "row_data" : [],
-                        "gene" : gene_name,
+                        "target" : target_name,
                         "plateID" : plate_id,
                         "ran_qaqc" : False,
                     })
                 
                 _, cal_info = self.get_worksheet_and_info(ws_title)
 
+                # Prepare row data for banner and header
+                self.prepare_row_data(None, None, target_name, is_calibration_curve=True, **row_data_kwargs)
+
                 # Copy the section banner
-                target_row, _ = self.copy_rows(template_cal, "cal_row_banner", ws_title, cur_std_data, other_data=other_data, target_row=target_row, target_col=target_col)
+                target_row, _ = self.copy_rows(template_cal, "cal_row_banner", ws_title, cur_std_data, target_row=target_row, target_col=target_col)
 
                 # Copy the header
-                target_row, _ = self.copy_rows(template_cal, "cal_row_header", ws_title, cur_std_data, other_data=other_data, target_row=target_row, target_col=target_col)
+                target_row, _ = self.copy_rows(template_cal, "cal_row_header", ws_title, cur_std_data, target_row=target_row, target_col=target_col)
 
                 # For each sample ID of the sq_data, copy "cal_row_data". This typically corresponds to one data row in the output
                 # (but depends on the template)
@@ -1206,26 +1081,21 @@ class QPCRPopulator(object):
                     cur_data = cur_std_data[cur_std_data[self.config.input.sample_id_col].str.lower() == sample_id]
                     if len(cur_data.index) == 0:
                         continue
-                    other_data = self.prepare_other_data(data, sample_id, gene_name)
+                    self.prepare_row_data(data, sample_id, target_name, item_number=idx, is_calibration_curve=True, **row_data_kwargs)
 
                     # Calculate SQ (Copies), log10(SQ), and StdAvg(Ct), so we can calculate the calibration curve
                     # parameters in memory (separate from the Excel File)
-                    sq = other_data["sq"]["data"][self.config.input.value_col].iloc[0]
+                    sq = self.row_data["mainTarget"]["sample"][self.config.input.sq_col].iloc[0]
 
-                    ct = cur_data[self.config.input.value_col][:self.config.input.slope_and_intercept_replicates].mean()
+                    ct = self.row_data["mainTarget"]["qpcr"]["ct"][:self.config.input.slope_and_intercept_replicates]# cur_data[self.config.input.value_col][:self.config.input.slope_and_intercept_replicates]#.mean()
+                    ct = [c for c in ct.values if isinstance(c, (float, int))]
                     logsq = math.log10(sq)
-                    cal_sq.append(sq)
-                    cal_logsq.append(logsq)
-                    cal_ct.append(ct)
+                    cal_sq.extend([sq] * len(ct))
+                    cal_logsq.extend([logsq] * len(ct))
+                    cal_ct.extend(ct)
 
-                    target_row, _ = self.copy_rows(template_cal, CAL_ROW_DATA, ws_title, cur_data, other_data=other_data, target_row=target_row, target_col=target_col, index=idx)
+                    target_row, _ = self.copy_rows(template_cal, CAL_ROW_DATA, ws_title, cur_data, target_row=target_row, target_col=target_col)
                     idx += 1
-
-                # if len(cal_ct) == 0:
-                #     print("!!!!", gene_name, plate_id)
-                #     continue
-
-                # logsq = [[sq] for sq in cal_logsq]
 
                 # If calibration_multi is set, then we prefer to use at least calibration.multi.min_points
                 # values for the calibration curve. If we have more points, we pick whichever number of
@@ -1245,6 +1115,9 @@ class QPCRPopulator(object):
                 # Calculate all the slopes, and choose the best one
                 slope = intercept = rsq = None
                 num_points = max_points
+                
+                # print("SAMPLEID:", sample_id, len(cur_sq_data.index), items)
+                
                 for idx, (logsq, ct) in enumerate(items):
                     A = np.vstack([logsq, np.ones(len(logsq))]).T
                     _slope, _intercept = np.linalg.lstsq(A, ct, rcond=None)[0]
@@ -1275,23 +1148,29 @@ class QPCRPopulator(object):
                     cal_info["cal_curve"][f"avg_std_{idx}"] = ct
 
                 # Copy footer
-                target_row, _ = self.copy_rows(template_cal, "cal_row_footer", ws_title, cur_std_data, other_data=other_data, target_row=target_row, target_col=target_col)
+                self.prepare_row_data(None, None, target_name, is_calibration_curve=True, **row_data_kwargs)
+                target_row, _ = self.copy_rows(template_cal, "cal_row_footer", ws_title, cur_std_data, target_row=target_row, target_col=target_col)
 
                 target_col = self.get_worksheet_and_info(ws_title)[1]["extents"][1]
 
                 # Add the calibration curve chart
                 if self.config.template.calibration_location != "hide":
                     chart = ScatterChart()
-                    analysis_date = cur_std_data[self.config.input.analysis_date_col].iloc[0]
-                    chart.title = f"{gene_name} Cal ({analysis_date})"
+                    analysis_date = data[self.config.input.analysis_date_col].dropna().unique()
+                    analysis_date = analysis_date[0] if len(analysis_date) > 0 else "No Date"
+                    # analysis_date = cur_std_data[self.config.input.analysis_date_col].iloc[0]
+
+                    chart.title = f"{target_name} Cal ({analysis_date})"
                     chart.legend = None
-                    rng_logct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_logct", include_sheet_name=True, max_rows=num_points, max_cols=num_points)
-                    rng_ct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_ct_avg", include_sheet_name=True, max_rows=num_points, max_cols=num_points)
+                    # rng_logct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_logct", include_sheet_name=True, max_rows=num_points, max_cols=num_points)
+                    # rng_ct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_graphct", include_sheet_name=True, max_rows=num_points, max_cols=num_points)
+                    rng_logct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_logct", include_sheet_name=True)
+                    rng_ct = self.get_named_range(ws_title, CAL_ROW_DATA, "cal_col_graphct", include_sheet_name=True)
 
                     try:
-                        ref_logct = Reference(ws, range_string=rng_logct)
-                        ref_ct = Reference(ws, range_string=rng_ct)
-                        series = Series(rng_ct, rng_logct)
+                        # ref_logct = Reference(ws, range_string=rng_logct)
+                        # ref_ct = Reference(ws, range_string=rng_ct)
+                        series = Series(rng_ct, rng_logct,)
                         series.graphicalProperties.line.noFill = True
                         series.marker.symbol = "circle"
                         series.trendline = Trendline(dispEq=True, dispRSqr=True, trendlineType="linear")
@@ -1334,129 +1213,149 @@ class QPCRPopulator(object):
             cur_h = ws.row_dimensions[r].height
             h += (cur_h if cur_h is not None else units.DEFAULT_ROW_HEIGHT) + 1
         return h
+    
+    def prepare_row_data(self, data, sample_id, main_target, *, item_number=None, is_calibration_curve=False, **kwargs):
+        self.row_data = {}
+        self.row_data["mainTarget"] = self.get_row_data_for_target(data, sample_id, main_target, is_calibration_curve=is_calibration_curve)
+        self.row_data["itemNumber"] = item_number
+        if not is_calibration_curve:
+            all_targets_info = [
+                {
+                    "tag" : "otherTarget{letter}",
+                    "targets" : self.config.input.other_targets,
+                },
+                {
+                    "tag" : "normTarget{letter}",
+                    "targets" : self.config.input.normalizing_targets,
+                },
+                {
+                    "tag" : "inhTarget{letter}",
+                    "targets" : self.config.input.inhibition_targets,
+                },
+            ]
+            for info in all_targets_info:
+                tag = info["tag"]
+                targets = info["targets"] or []
+                for idx, cur_target in enumerate(targets):
+                    letter = get_column_letter(idx+1).upper()
+                    cur_tag = tag.format(letter=letter)
+                    self.row_data[cur_tag] = self.get_row_data_for_target(data, sample_id, cur_target)
+        for key, val in kwargs.items():
+            self.row_data[key.lower()] = val
+        self.row_data["mainTargetName"] = main_target
+        return self.row_data
+    
+    def get_row_data_for_target(self, data, sample_id, target_name, is_calibration_curve=False):
+        # if not sample_id:
+        #     return {}
 
-    def prepare_other_data(self, data, sample_id, gene_name):
-        """Prepare additional data that might be used by a single row in the template file. 
-        
-        The main data are all rows corresponding to a single sample_id and gene_name within a group, that will
-        be used to populate a row in the Excel spreadsheet. The other data calculated here are data such as
-        which matching baseline (eg. nPMMoV) data go with it, what the starting quantities, tube mass, extracted mass,
-        etc are for calibration data, etc.
+        if sample_id and data is not None:
+            sample_data = data[data[self.config.input.sample_id_col].str.lower() == sample_id.lower()]
+        else:
+            sample_data = data
 
-        Parameters
-        ----------
-        data : pd.DataFrame
-            The data to retrieve everything from.
-        sample_id : str
-            The sample ID to get the other data for.
-        gene_name : str
-            The gene name for the sample.
+        sample_df = pd.DataFrame(columns=["analysisDate", "sampleDate", "sampleID", "siteID", "typeShortDescription", "typeDescription", "totalVolume", "emptyTubeMass", "totalTubeMass", "settledSolids", "extractedMass", "sq", "plateID", "standardCurveID"])
+        qpcr_df = pd.DataFrame(columns=["ct", "ct_avg"])
+        methods_df = pd.DataFrame(columns=self.methods.methods_df.columns)
 
-        Returns
-        -------
-        dict
-            Dictionary with all additional data. Keys can be
-                "sq" : Starting quantities for standards data
-                "emptytubemass", "tottubemass", "extmass" : Mass of empty tube, total tube, and
-                    extracted mass.
-                "{other_gene_name}" : data for items with same sample_id but different gene_name
+        if sample_data is not None:
+            if target_name is not None:
+                target_sample_df = sample_data[sample_data[self.config.input.target_col].str.lower() == target_name.lower()]
+                sample_df = target_sample_df[sample_df.columns].drop_duplicates(self.config.input.sample_id_col)
+                methods_df = self.methods.get_row_for_target(target_name)
+
+                # Create qpcr_df
+                # Ct
+                target_filt = sample_data[self.config.input.target_col].str.lower() == target_name.lower()
+                if is_calibration_curve:
+                    std_filt = sample_data[self.config.input.measure_type_col] == self.config.input.measure_type_std
+                    ct_data = sample_data[std_filt & target_filt] # select_data(sample_data, self.config.input.unit_other_col, "Ct_Std", match_target=target_name, drop_duplicates_by_sample_id=False)
+                else:
+                    unk_filt = sample_data[self.config.input.measure_type_col] == self.config.input.measure_type_unknown
+                    ct_data = sample_data[unk_filt & target_filt] # select_data(sample_data, self.config.input.unit_col, "Ct", match_target=target_name, drop_duplicates_by_sample_id=False)
+                values = ct_data[self.config.input.ct_col]
+                outliers = ct_data[OUTLIER_COL]
+
+                if isinstance(values, pd.Series):
+                    values = values.tolist()
+                values = list(values)
+                if isinstance(outliers, pd.Series):
+                    outliers = list(outliers)
+                outliers = list(outliers) if outliers is not None else None
+
+                # df = pd.DataFrame(columns=["val", "group"])
+                df_values = pd.DataFrame(columns=["val"])
+                for i in range(len(values)):
+                    # Add the value, or instead add the outlier if it exists
+                    val = "" if i >= len(values) else (values[i] if outliers is None or pd.isna(outliers[i]) else f'[{outliers[i]}]')
+                    # cur_data = None if data is None or i >= len(data.index) else data.iloc[i]
+
+                    # Try to convert to float, use None if it can't be converted
+                    try:
+                        float_val = None
+                        float_val = float(val)
+                    except:
+                        pass
+                    df_values = df_values.append({"val" : float_val}, ignore_index=True)
+                    qpcr_df.loc[i, "ct"] = val
+
+                # Add the average
+                if not qpcr_df.empty:
+                    qpcr_df["ct_avg"] = df_values["val"].mean()
+                   
+        target_name_nodil, dilution = self.methods.split_target_and_dilution_factor(target_name)        
+        dilution_text = f"1/{dilution}" if dilution != 1 else "Full"
+        dilution_text_short = f"{dilution}" if dilution != 1 else "Full"
+        target_name_withdilution = target_name_nodil if dilution == 1 else f"{target_name_nodil}:{dilution}"
+
+        row_data = {
+            "sample" : sample_df,
+            "qpcr" : qpcr_df,
+            "method" : methods_df,
+            "targetName" : target_name,
+            "targetNameNoDilution" : target_name_nodil,
+            "targetNameWithDilution" : target_name_withdilution,
+            "dilutionFactor" : dilution,
+            "dilutionText" : dilution_text,
+            "dilutionTextShort" : dilution_text_short,
+        }
+
+        return row_data.copy()
+
+    def get_recognized_target(self, target_name, main_targets_only=False):
+        """Map the specified target name to a unique one, ensuring that target names are consistent.
+        The map is specified by input.main_targets and input.other_targets in the config file.
         """
-        if not sample_id:
-            return {}
-
-        sample_data = data[data[self.config.input.sample_id_col].str.lower() == sample_id.lower()]
-
-        other_data = {}
-
-        # Add other genes
-        for gene, data in sample_data[sample_data[self.config.input.unit_col] == "Ct"].groupby(self.config.input.gene_type_col):
-            if gene is None or gene.lower() == gene_name:
-                continue
-
-            other_data[gene.lower()] = {
-                "data" : data
-            }
-
-        if gene_name is not None:
-            # Starting quantities
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "SQ"]
-            ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            other_data["sq"] = {
-                "data" : ct_data,
-            }
-
-            # Empty tube mass
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "emptyTubeMass"]
-            # ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            ct_data = ct_data.drop_duplicates(self.config.input.sample_id_col)
-            other_data["emptytubemass"] = {
-                "data" : ct_data,
-            }
-
-            # Total tube mass
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "totTubeMass"]
-            # ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            ct_data = ct_data.drop_duplicates(self.config.input.sample_id_col)
-            other_data["tottubemass"] = {
-                "data" : ct_data,
-            }
-
-            # Extracted mass
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "extMass"]
-            # ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            ct_data = ct_data.drop_duplicates(self.config.input.sample_id_col)
-            other_data["extmass"] = {
-                "data" : ct_data,
-            }
-
-            # Settled solids
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "setSol"]
-            # ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            ct_data = ct_data.drop_duplicates(self.config.input.sample_id_col)
-            other_data["setsol"] = {
-                "data" : ct_data,
-            }
-
-            # Total volume
-            ct_data = sample_data[sample_data[self.config.input.unit_other_col] == "totVol"]
-            # ct_data = ct_data[ct_data[self.config.input.gene_type_col].str.lower() == gene_name.lower()].drop_duplicates(self.config.input.sample_id_col)
-            ct_data = ct_data.drop_duplicates(self.config.input.sample_id_col)
-            other_data["totvol"] = {
-                "data" : ct_data,
-            }
-
-        return other_data
-
-    def get_recognized_gene(self, gene_name, main_genes_only=False):
-        """Map the specified gene name to a unique one, ensuring that gene names are consistent.
-        The map is specified by input.main_genes and input.other_genes in the config file.
-        """
-        if gene_name is None:
+        if target_name is None:
             return None
-        recognized_genes = self.config.input.get("main_genes", [])
-        if isinstance(recognized_genes, str):
-            recognized_genes = [recognized_genes]
+        recognized_targets = self.config.input.get("main_targets", [])
+        if isinstance(recognized_targets, str):
+            recognized_targets = [recognized_targets]
 
-        # Add other genes
-        if not main_genes_only:
-            other_genes = self.config.input.get("other_genes", [])
-            if isinstance(other_genes, str):
-                other_genes = [other_genes]
-            recognized_genes = list(recognized_genes) + list(other_genes)
-        if len(recognized_genes) == 0:
-            return gene_name
+        # Add other targets
+        if not main_targets_only:
+            other_targets = self.config.input.get("other_targets", []) or []
+            if isinstance(other_targets, str):
+                other_targets = [other_targets]
+            inhibition_targets = self.config.input.get("inhibition_targets", []) or []
+            if isinstance(inhibition_targets, str):
+                inhibition_targets = [inhibition_targets]
+            normalizing_targets = self.config.input.get("normalizing_targets", []) or []
+            if isinstance(normalizing_targets, str):
+                normalizing_targets = [normalizing_targets]
+            recognized_targets = list(recognized_targets) + list(other_targets) + list(inhibition_targets) + list(normalizing_targets)
+            
+        if len(recognized_targets) == 0:
+            return target_name
         
-        # Add baseline gene
-        # recognized_genes = recognized_genes + [self.config.input.baseline_id]
-        
-        lower_recognized_genes = [g.lower() for g in recognized_genes]
+        lower_recognized_targets = [g.lower() for g in recognized_targets]
 
-        if gene_name.lower() in lower_recognized_genes:
-            return recognized_genes[lower_recognized_genes.index(gene_name.lower())]
+        if target_name.lower() in lower_recognized_targets:
+            return recognized_targets[lower_recognized_targets.index(target_name.lower())]
         
         return None
-
-    def create_main(self, data):
+    
+    def create_main(self, group_name, data):
         """Create the main sheet for the specified group of data. The data should usually represent a full QPCR run, possibly
         from multiple plates running the same samples.
 
@@ -1465,21 +1364,22 @@ class QPCRPopulator(object):
         bool
             True if the main sheet has data, False if it doesn't.
         """
-        ct_values = data[data[self.config.input.unit_col] == "Ct"]
-        # _gene_groups = ct_values.groupby(self.config.input.gene_type_col)
-        gene_groups = []
+        ct_values = data[data[self.config.input.measure_type_col] == self.config.input.measure_type_unknown]
+        # _target_groups = ct_values.groupby(self.config.input.target_type_col)
+        target_groups = []
 
-        # Group by all the main_genes (specified in config file)
-        for gene_name in self.config.input.main_genes:
-            gene_filt = ct_values[self.config.input.gene_type_col] == gene_name
-            # Collect all other genes that we're interested in (other_genes in the config file)
-            other_genes_filt = ct_values[self.config.input.gene_type_col].str.lower().isin(self.config.input.other_genes)
-            group = ct_values[gene_filt | other_genes_filt]
-            if len(group.index) == 0:
+        # Group by all the main_targets (specified in config file)
+        other_targets = [g.lower() for g in self.config.input.other_targets or []]
+        for target_name in self.config.input.main_targets:
+            target_filt = ct_values[self.config.input.target_col].str.lower() == target_name.lower()
+            if target_filt.sum() == 0:
                 continue
-            gene_groups.append((gene_name, group))
+            # Collect all other targets that we're interested in (other_targets in the config file)
+            other_targets_filt = ct_values[self.config.input.target_col].str.lower().isin(other_targets)
+            group = ct_values[target_filt | other_targets_filt]
+            target_groups.append((target_name, group))
 
-        if len(gene_groups) == 0:
+        if len(target_groups) == 0:
             return False
 
         main_ws, info = self.get_worksheet_and_info(MAIN_SHEET)
@@ -1505,29 +1405,31 @@ class QPCRPopulator(object):
         info["row_names"] = row_names
         info["row_data"] = []
 
-        # For all rows in WWMeasure where the quality flag is set to True (ie bad), set the value to None, since we
-        # don't want to use them.
-        # @TODO: Not sure if this is the behavior we want
-        # data.loc[data[self.config.input.qa_col] == True, self.config.input.value_col] = None
+        row_data_kwargs = {
+            "groupName" : group_name,
+        }
 
         # Copy the banner once
         if requires_banners_and_headers:
+            self.prepare_row_data(None, None, target_name, **row_data_kwargs)
             target_row, _ = self.copy_rows(template_main, "main_row_banner", MAIN_SHEET, ct_values, target_row=target_row, target_col=target_col)
         self.main_columns = self.get_columns_from_template(template_main)
 
-        for gene_name, gene_group in gene_groups:
-            gene_group = gene_group[gene_group[self.config.input.gene_type_col] == gene_name]
+        for target_name, target_group in target_groups:
+            target_group = target_group[target_group[self.config.input.target_col] == target_name]
 
             # Copy the header
             if requires_banners_and_headers:
+                self.prepare_row_data(None, None, target_name, **row_data_kwargs)
                 target_row, _ = self.copy_rows(template_main, "main_row_header", MAIN_SHEET, ct_values, target_row=target_row, target_col=target_col)
 
             # For each sample ID of the data, copy "main_row_data"
-            for idx, sample_id in enumerate(gene_group[self.config.input.sample_id_col].str.lower().unique()):
-                other_data = self.prepare_other_data(data, sample_id, gene_name)
-                match_filt = gene_group[self.config.input.sample_id_col].str.lower() == sample_id
-                cur_data = gene_group[match_filt]
-                target_row, _ = self.copy_rows(template_main, MAIN_ROW_DATA, MAIN_SHEET, cur_data, other_data=other_data, target_row=target_row, target_col=target_col, index=idx)
+            for idx, sample_id in enumerate(target_group[self.config.input.sample_id_col].str.lower().unique()):
+                self.prepare_row_data(data, sample_id, target_name, item_number=idx, **row_data_kwargs)
+                
+                match_filt = target_group[self.config.input.sample_id_col].str.lower() == sample_id
+                cur_data = target_group[match_filt]
+                target_row, _ = self.copy_rows(template_main, MAIN_ROW_DATA, MAIN_SHEET, cur_data, target_row=target_row, target_col=target_col)
 
             if main_banners_and_headers_once:
                 requires_banners_and_headers = False
@@ -1546,24 +1448,9 @@ class QPCRPopulator(object):
                 if self.config.template.calibration_location == "hide":
                     title = info["ws"].title
                     if title in self.output_wb.sheetnames:
-                        print(f"REMOVING '{title}'")
                         self.output_wb.remove(info["ws"])
         for remove_info in remove:
             self.worksheets_info.remove(remove_info)
-
-    def get_sample_date(self, sample_id):
-        """Get the sample date string, from the ODM samples table.
-        """
-        sample_data = self.sample_sheet_df[self.sample_sheet_df[self.config.input.sample_id_col] == sample_id]
-        if len(sample_data.index) > 0:
-            sample_date = sample_data[self.config.input.sample_date_col].iloc[0]
-            if not pd.isna(sample_date):
-                sample_date = sample_date.strftime("%Y-%m-%d")
-            else:
-                sample_date = None
-        else:
-            sample_date = None
-        return sample_date
 
     def get_named_cell_address_or_value(self, sheet_name, id, fixed_row=False, fixed_col=False, prefer_precalculated=True, target_sheet_name=None):
         """Retrieve a named cell address, or get the value stored in the address if possible.
@@ -1633,31 +1520,35 @@ class QPCRPopulator(object):
         has the column key.
         """
         attached_data = self.get_cell_attached_data(cell, [])
+        key = "{%s}" % key
         for data in attached_data:
-            if key in data:
-                return data[key]
+            v, _ = parse_values(key, data)
+            if v != key:
+                return v
         return default
 
     def get_cell_plate_id(self, cell, default=None):
         """Get the plateID of the attached_data for the cell, by looking for the first attached_data that
         has the column self.config.input.plate_id_col. (this calls get_cell_attached_data_value)
         """
-        return self.get_cell_attached_data_value(cell, self.config.input.plate_id_col, None)
+        # @TODO: Do not hardcode "sample>plateID"
+        return self.get_cell_attached_data_value(cell, "sample>plateID", None)
 
     def get_cell_standard_curve_id(self, cell, default=None):
         """Get the standardCurveID of the attached_data for the cell, by looking for the first attached_data that
         has the column self.config.input.standard_curve_id_col. (this calls get_cell_attached_data_value)
         """
-        return self.get_cell_attached_data_value(cell, self.config.input.standard_curve_id_col, None)
+        # @TODO: Do not hardcode "sample>standardCurveID"!
+        return self.get_cell_attached_data_value(cell, "sample>standardCurveID", None)
 
     def get_calibration_value(self, sheet_name, cal_value):
         """Get a calibration curve value from the specified calibration curve sheet ID, whose name
-        is in the format specified by CAL_SHEET_FMT ("Cal-{gene}-{plateID}").
+        is in the format specified by CAL_SHEET_FMT ("Cal-{targetName}-{plateID}").
 
         Parameters
         ----------
         sheet_name : str
-            The sheet name of the calibration curve, The name is in the format specified by CAL_SHEET_FMT ("Cal-{gene}-{plateID}").
+            The sheet name of the calibration curve, The name is in the format specified by CAL_SHEET_FMT ("Cal-{targetName}-{plateID}").
         cal_value : str
             The calibration value to retrieve. Can be any of:
                 "sq" : All starting quantity (copies/well) values for the calibration curve, from highest to lowest.
@@ -1705,15 +1596,13 @@ class QPCRPopulator(object):
             since all required standard curves and additional data are included in each group.
         """
         def _clean_site_id(site_id):
-            site_id = str(site_id).replace(f"{self.config.input.lab_id}{self.config.input.lab_id_separator}", "")
+            # site_id = str(site_id).replace(f"{self.config.input.lab_id}{self.config.input.lab_id_separator}", "")
             site_id = re.sub("[^A-Za-z0-9_\.-]", "", site_id)
             return site_id
 
-        # Splits all Unknowns by siteID. For each group, all other measures (ie. non-Unknowns) are included
-        site_id_col = f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"
-        unknowns_filt = (df["unit"] == "Ct")
+        unknowns_filt = df[self.config.input.measure_type_col] == self.config.input.measure_type_unknown
         cleaned_site_id_col = "___cleaned_site_id___"
-        df[cleaned_site_id_col] = df[site_id_col].map(_clean_site_id)
+        df[cleaned_site_id_col] = df[self.config.input.site_id_col].map(_clean_site_id)
         groups = self.sites.group_by_file_template(df, cleaned_site_id_col, self.target_file, intersection_filter=unknowns_filt, always_include_filter=~unknowns_filt)
         del df[cleaned_site_id_col]
         return groups
@@ -1734,7 +1623,13 @@ class QPCRPopulator(object):
         """
         # Group by analysis date, and include all Ct_Std and SQ values needed for creating the calibration curves for the analysis date
         analysis_dates = df[self.config.input.analysis_date_col].unique()
+        # We remove pd.NaT from analysis_dates before we do analysis_dates.sort() because
+        # comparing NaT to datetime is deprecated
+        has_nat = np.any([pd.isnull(d) for d in analysis_dates])
+        analysis_dates = [d for d in analysis_dates if not pd.isnull(d)]
         analysis_dates.sort()
+        if has_nat:
+            analysis_dates.append(pd.NaT)
         groups = []
         for analysis_date in analysis_dates:
             # Include all items for the current analysis_date
@@ -1742,34 +1637,35 @@ class QPCRPopulator(object):
                 cur_filt = df[self.config.input.analysis_date_col].isna()
             else:
                 cur_filt = df[self.config.input.analysis_date_col] == analysis_date
-            # Include all needed standard curve data (Ct_Std and SQ)
+            # Include all needed standard curve data (measureType "std")
             standard_curve_ids = df[cur_filt][self.config.input.standard_curve_id_col].unique()
-            std_filt = df[self.config.input.standard_curve_id_col].isin(standard_curve_ids) & df[self.config.input.unit_other_col].isin(["Ct_Std", "SQ"])
+            std_filt = df[self.config.input.standard_curve_id_col].isin(standard_curve_ids) & df[self.config.input.measure_type_col].isin([self.config.input.measure_type_std])
             groups.append((analysis_date, df[cur_filt | std_filt]))
 
         return groups
 
-    def get_id_without_rerun(self, sample_id, gene=None):
+    def get_id_without_rerun(self, sample_id, target=None):
         collapse_reruns = self.config.input.get("collapse_reruns", None)
         if collapse_reruns is None:
             return sample_id
-        if collapse_reruns.genes is not None and len(collapse_reruns.genes) > 0 and gene is not None and gene.lower() not in [g.lower() for g in collapse_reruns.genes]:
+        if collapse_reruns.targets is not None and len(collapse_reruns.targets) > 0 and target is not None and target.lower() not in [g.lower() for g in collapse_reruns.targets]:
             return sample_id
 
         match = re.search(collapse_reruns.sample_rerun_id, sample_id)
         return match[1] if match and match[1] else sample_id
 
-    def get_rerun_number(self, sample_id, gene=None):
+    def get_rerun_number(self, sample_id, target=None):
         collapse_reruns = self.config.input.get("collapse_reruns", None)
         if collapse_reruns is None:
             return None
-        if collapse_reruns.genes is not None and len(collapse_reruns.genes) > 0 and gene is not None and gene.lower() not in [g.lower() for g in collapse_reruns.genes]:
+        if collapse_reruns.targets is not None and len(collapse_reruns.targets) > 0 and target is not None and target.lower() not in [g.lower() for g in collapse_reruns.targets]:
             return None
 
         match = re.search(collapse_reruns.sample_rerun_number, sample_id)
         return int(match[1] if match[1] else 0) if match is not None else None
 
     def prepare_reruns(self, df):
+        # @TODO: Test this and rewrite (with comments)
         if "collapse_reruns" not in self.config.input:
             return df
 
@@ -1777,22 +1673,21 @@ class QPCRPopulator(object):
         reruns["original_id"] = df[self.config.input.sample_id_col]
         reruns["id"] = df[self.config.input.sample_id_col].map(self.get_id_without_rerun)
         reruns["number"] = df[self.config.input.sample_id_col].map(self.get_rerun_number)
-        reruns["gene"] = df[self.config.input.gene_type_col]
-        reruns["unit"] = df[self.config.input.unit_col]
-        reruns["unit_other"] = df[self.config.input.unit_other_col]
+        reruns["target"] = df[self.config.input.target_col]
+        reruns["measure_type"] = df[self.config.input.measure_type_col]
         reruns["index"] = df[self.config.input.index_col]
         # reruns["index"] = df[self.config.input.index_col]
         reruns.index = df.index
         reruns = reruns.dropna(subset=["number"], how="any")
         reruns["number"] = reruns["number"].astype(int)
 
-        reruns = reruns[reruns["gene"].isin(self.config.input.collapse_reruns.genes)]
+        reruns = reruns[reruns["target"].isin(self.config.input.collapse_reruns.targets)]
         # print(reruns)
 
-        groups = reruns.groupby(["id", "gene", "unit", "unit_other"], as_index=False)
-        for (group_id, group_gene, group_unit, group_unit_other), group_idx in groups.groups.items():
+        groups = reruns.groupby(["id", "target", "measure_type"], as_index=False)
+        for (group_id, group_target, group_measure_type), group_idx in groups.groups.items():
             group = reruns.loc[group_idx]
-            group_id, group_gene, group_unit, group_unit_other = group[["id", "gene", "unit", "unit_other"]].iloc[0].tolist()
+            group_id, group_target, group_measure_type = group[["id", "target", "measure_type"]].iloc[0].tolist()
             max_rerun = group["number"].max()
 
             # Go through all reruns, from 0 to max_rerun, project down to non-rerun values at each step
@@ -1809,9 +1704,8 @@ class QPCRPopulator(object):
                         return df.isna()
                     return df == value
                 non_reruns = df[_match(df[self.config.input.sample_id_col], group_id) & \
-                    _match(df[self.config.input.gene_type_col], group_gene) & \
-                    _match(df[self.config.input.unit_col], group_unit) & \
-                    _match(df[self.config.input.unit_other_col], group_unit_other)]
+                    _match(df[self.config.input.target_col], group_target) & \
+                    _match(df[self.config.input.measure_type_col], group_measure_type)]
                 non_reruns = non_reruns.sort_values(self.config.input.index_col)
                 df = df.drop(index=non_reruns.index[:min(len(cur_reruns.index), len(non_reruns.index))])
 
@@ -1820,115 +1714,116 @@ class QPCRPopulator(object):
 
         return df
         
-    def get_standard_curve_common_gene(self, gene):
-        """Get the common root gene name that is used for the specified gene to refer to a standard curve. For example,
-        the gene nPMMoV_dil10, which is an nPMMoV dilution, will typically be mapped to the gene nPMMoV, which is
-        the undiluted form. Both nPMMoV_dil10 and nPMMoV use the same standard curve.
+    def get_standard_curve_common_target(self, target):
+        """Get the common root target name that is used for the specified target to refer to a standard curve. For example,
+        the target PMMoV:10, which is a PMMoV dilution, will typically be mapped to the target PMMoV, which is
+        the undiluted form. Both PMMoV:10 and PMMoV use the same standard curve.
         """
-        def _get_common_gene(gene):
-            common_genes = self.config.input.get("standard_curve_common_genes", None)
-            if common_genes is not None:
-                for key, names in common_genes.items():
-                    if gene.lower() in [n.lower() for n in names]:
+        def _get_common_target(target):
+            common_targets = self.config.input.get("standard_curve_common_targets", None)
+            if common_targets is not None:
+                for key, names in common_targets.items():
+                    if target.lower() in [n.lower() for n in names]:
                         return key
-            return gene
-        if isinstance(gene, str):
-            gene = _get_common_gene(gene)
+            return target
+        if isinstance(target, str):
+            target = _get_common_target(target)
         else:
-            gene = gene.map(_get_common_gene)
-        return gene
+            target = target.map(_get_common_target)
+        return target
 
-    def get_standard_curve_id(self, gene, plateID):
-        """Get the standard curve ID (ie. it's sheet name) for the standard curve for the specified gene
+    def get_standard_curve_id(self, target, plateID):
+        """Get the standard curve ID (ie. it's sheet name) for the standard curve for the specified target
         on the specified plateID. 
 
         Parameters
         ----------
-        gene : str | pd.DataFrame
-            The gene to get the curve ID for. Can be a single gene (str) or a DataFrame of genes. If a DataFrame
-            then the column self.config.input.gene_type_col is used.
+        target : str | pd.DataFrame
+            The target to get the curve ID for. Can be a single target (str) or a DataFrame of targets. If a DataFrame
+            then the column self.config.input.target_col is used.
         plateID : str | pd.DataFrame
-            The plate ID that contains the standard curve for the gene. Can be a single plate ID (str) or a DataFrame 
+            The plate ID that contains the standard curve for the target. Can be a single plate ID (str) or a DataFrame 
             of plate IDs. If a DataFrame then the column self.config.input.plate_id_col is used.
 
         Returns
         -------
         str | pd.Series
-            The standard curve ID(s). If both gene and plateID are strings then a single string is returned, otherwise
-            a pd.Series is returned, with all curve IDs for the input gene/plateID with matching index.
+            The standard curve ID(s). If both target and plateID are strings then a single string is returned, otherwise
+            a pd.Series is returned, with all curve IDs for the input target/plateID with matching index.
         """
-        gene = self.get_standard_curve_common_gene(gene)
+        target = self.get_standard_curve_common_target(target)
 
-        if isinstance(gene, str) and isinstance(plateID, str):
-            return CAL_SHEET_FMT.format(gene=gene, plateID=plateID)
-        elif isinstance(gene, str):
-            gene = pd.DataFrame({self.config.input.gene_type_col : [gene]*len(plateID.index)}, index=plateID.index)
+        if isinstance(target, str) and isinstance(plateID, str):
+            return CAL_SHEET_FMT.format(targetName=target, plateID=plateID)
+        elif isinstance(target, str):
+            # target is a string, plateID is a DataFrame
+            target = pd.DataFrame({self.config.input.target_col : [target]*len(plateID.index)}, index=plateID.index)
         elif isinstance(plateID, str):
-            plateID = pd.DataFrame({self.config.input.plate_id_col : [plateID]*len(gene.index)}, index=gene.index)
+            # target is a DataFrame, plateID is a string
+            plateID = pd.DataFrame({self.config.input.plate_id_col : [plateID]*len(target.index)}, index=target.index)
 
-        return pd.concat([gene, plateID], axis=1).agg(lambda x: CAL_SHEET_FMT.format(gene=x[self.config.input.gene_type_col], plateID=x[self.config.input.plate_id_col]), axis=1)
+        return pd.concat([target, plateID], axis=1).agg(lambda x: CAL_SHEET_FMT.format(targetName=x[self.config.input.target_col], plateID=x[self.config.input.plate_id_col]), axis=1)
 
-        # return CAL_SHEET_FMT.format(gene=gene, plateID=plateID)
+        # return CAL_SHEET_FMT.format(targetName=target, plateID=plateID)
 
     def assign_standard_curve_ids(self):
-        """For all the Ct rows in the full measure_sheet_df (WWMeasure), determine the standard curve ID used by that
-        Ct value. Ct values are either rows with "Ct" in the unit_col or "Ct_Std"/"Ct_EB" in the unit_other_col. The
-        standard curve ID is stored in the self.config.input.standard_curve_id_col column.
-
-        If self.config.input.require_cal_curve_on_same_plate is True, then only standard curves on the same plate
-        as the Ct value are used, and those Ct values that have no matching standard curve on the plate are removed.
+        """Add the standard curve IDs to all items in the QPCR DataFrame (self.qpcr_df). The standard curve IDs depend
+        on the target and plate ID.
         """
-        # The standard curve ID is the plateID that contains the standard curve for the sample. Usually the
-        # same plate that the sample is on
-        self.measure_sheet_df[self.config.input.standard_curve_id_col] = None
+        self.qpcr_df[self.config.input.standard_curve_id_col] = None
 
-        # Assign all curve plate IDs for all Std samples and SQ values
-        std_filt = self.measure_sheet_df[self.config.input.unit_other_col].isin(["Ct_Std", "SQ"])
-        self.measure_sheet_df.loc[std_filt, self.config.input.standard_curve_id_col] = self.get_standard_curve_id(self.measure_sheet_df.loc[std_filt, self.config.input.gene_type_col], self.measure_sheet_df.loc[std_filt, self.config.input.plate_id_col])
-        known_std_curves = self.measure_sheet_df.loc[std_filt]
+        # Assign all curve plate IDs for all std samples. This will give us all standardCurveIDs that are available
+        # in the QPCR data.
+        std_filt = self.qpcr_df[self.config.input.measure_type_col] == self.config.input.measure_type_std
+        self.qpcr_df.loc[std_filt, self.config.input.standard_curve_id_col] = self.get_standard_curve_id(self.qpcr_df.loc[std_filt, self.config.input.target_col], self.qpcr_df.loc[std_filt, self.config.input.plate_id_col])
+        
+        known_std_curves = self.qpcr_df.loc[std_filt]
         known_std_curves = known_std_curves.sort_values(self.config.input.analysis_date_col, ascending=False)
 
         def _find_standard_curve(row):
-            same_gene_filt = self.get_standard_curve_common_gene(row[self.config.input.gene_type_col]) == self.get_standard_curve_common_gene(known_std_curves[self.config.input.gene_type_col])
+            same_target_filt = self.get_standard_curve_common_target(row[self.config.input.target_col]) == self.get_standard_curve_common_target(known_std_curves[self.config.input.target_col])
             same_plate_id_filt = row[self.config.input.plate_id_col] == known_std_curves[self.config.input.plate_id_col] #standard_curve_id_col]
 
-            # Our own plate has a standard curve for our gene type
-            if (same_gene_filt & same_plate_id_filt).sum() > 0:
-                return self.get_standard_curve_id(row[self.config.input.gene_type_col], row[self.config.input.plate_id_col])
+            # Our own plate has a standard curve for our target type
+            if (same_target_filt & same_plate_id_filt).sum() > 0:
+                return self.get_standard_curve_id(row[self.config.input.target_col], row[self.config.input.plate_id_col])
 
             if self.config.input.require_cal_curve_on_same_plate:
+                # Standard curves must be on the same plate as the unknowns, but none was found
                 return ""
 
-            # Try to find another plate with a standard curve for our gene type
+            # Try to find another plate with a standard curve for our target type
             # We take the plate with the QPCR date closest to our own QPCR date (either before or after)
-            other_plates_filt = known_std_curves[self.config.input.plate_id_col] != row[self.config.input.plate_id_col] #known_std_curves[self.config.input.standard_curve_id_col] != row[self.config.input.plate_id_col]
-            other_plates = known_std_curves[other_plates_filt & same_gene_filt]
+            other_plates_filt = known_std_curves[self.config.input.plate_id_col] != row[self.config.input.plate_id_col]
+            other_plates = known_std_curves[other_plates_filt & same_target_filt]
             if len(other_plates.index) == 0:
+                # No standard curves with same target (but on different plate) found
                 return ""
 
             delta_date = (other_plates[self.config.input.analysis_date_col] - row[self.config.input.analysis_date_col]).map(abs)
             min_delta = delta_date.idxmin()
             return other_plates.loc[min_delta][self.config.input.standard_curve_id_col]
 
-            # We take the plate with the latest QPCR date on or before our own QPCR date (ie. in the past)
-            # before_filt = known_std_curves[self.config.input.analysis_date_col] <= row[self.config.input.analysis_date_col]
-            # other_plates_filt = known_std_curves[self.config.input.standard_curve_id_col] != row[self.config.input.plate_id_col]
-            # if (before_filt & other_plates_filt & same_gene_filt).sum() > 0:
-            #     return known_std_curves.loc[before_filt & other_plates_filt & same_gene_filt].iloc[0][self.config.input.standard_curve_id_col]
-
-            # return ""
-
-        # Assign all curve plate IDs for all Ct samples
-        ct_filt = (self.measure_sheet_df[self.config.input.unit_col] == "Ct") | (self.measure_sheet_df[self.config.input.unit_other_col].isin(["Ct_NTC", "Ct_EB"]))
-        self.measure_sheet_df.loc[ct_filt, self.config.input.standard_curve_id_col] = self.measure_sheet_df.loc[ct_filt].agg(_find_standard_curve, axis=1)
-        # print(self.measure_sheet_df.loc[ct_filt][self.measure_sheet_df[self.config.input.gene_type_col] == "nPMMoV_dil10"])
+        # Assign all curve plate IDs for all QPCR samples
+        ct_filt = self.qpcr_df[self.config.input.measure_type_col].isin([self.config.input.measure_type_unknown, self.config.input.measure_type_ntc, self.config.input.measure_type_eb])
+        self.qpcr_df.loc[ct_filt, self.config.input.standard_curve_id_col] = self.qpcr_df.loc[ct_filt].agg(_find_standard_curve, axis=1)
 
         # Remove all Unknowns that do not have a standard curve
-        if self.config.input.require_cal_curve_on_same_plate:
-            unknowns_filt = self.measure_sheet_df[self.config.input.unit_col] == "Ct"
-            has_curve_filt = self.measure_sheet_df[self.config.input.standard_curve_id_col] != ""
-            self.measure_sheet_df = self.measure_sheet_df[~unknowns_filt | (unknowns_filt & has_curve_filt)]
-
+        # if self.config.input.require_cal_curve_on_same_plate:
+        unknowns_filt = self.qpcr_df[self.config.input.measure_type_col] == self.config.input.measure_type_unknown
+        has_curve_filt = self.qpcr_df[self.config.input.standard_curve_id_col] != ""
+        self.qpcr_df = self.qpcr_df[~unknowns_filt | (unknowns_filt & has_curve_filt)]
+              
+    def apply_value_mappers(self):
+        """Perform additional processing by running the value_mappers in the config file on the main QPCR input. eg. samples named "EB" will
+        receive "EB" in the "Content" column.
+        """
+        if "value_mappers" in self.config.input:
+            for value_mapper in self.config.input.value_mappers:
+                filt = self.qpcr_df[value_mapper.match_column].str.contains(value_mapper.match_expression, case=value_mapper.get("ignore_case", False))
+                filt = filt.fillna(False)
+                self.qpcr_df.loc[filt, value_mapper.target_column] = value_mapper.target_value
+                                        
     def populate(self):
         """Do a full population of the output. This is the main function to call by a QPCRPopulator user.
         """        
@@ -1939,75 +1834,59 @@ class QPCRPopulator(object):
         self.template_xl = openpyxl.load_workbook(self.template_file)
         print(f"Loading input file {self.input_file}...")
         fix_xlsx_file(self.input_file)
-        input_xl = openpyxl.load_workbook(self.input_file)
-        
-        print(f"Loading measure sheet {self.config.input.measure_sheet_name}...")
-        self.measure_sheet_df = sheet_to_df(input_xl[self.config.input.measure_sheet_name])
-        
-        print(f"Loading sample sheet {self.config.input.sample_sheet_name}...")
-        sample_sheet_df = sheet_to_df(input_xl[self.config.input.sample_sheet_name])
-        sample_sheet_df[self.config.input.sample_short_description_col] = self.sites.get_type_short_description(sample_sheet_df[self.config.input.sample_type_col]) if self.sites is not None else ""
-        sample_sheet_df[self.config.input.sample_description_col] = self.sites.get_type_description(sample_sheet_df[self.config.input.sample_type_col]) if self.sites is not None else ""
+        # input_xl = openpyxl.load_workbook(self.input_file)
+        input_df = pd.read_excel(self.input_file, sheet_name=0)
+                
+        print(f"Loading QPCR sheet {self.input_file}...")
+        # self.measure_sheet_df = sheet_to_df(input_xl[self.config.input.measure_sheet_name])
+        self.qpcr_df = input_df #sheet_to_df(input_xl[input_xl.sheetnames[0]])
+        self.apply_value_mappers()
+        self.qpcr_df = self.sampleids.make_all_sample_ids(
+            self.qpcr_df, 
+            sample_id_col=self.config.input.sample_id_col, 
+            sample_date_col=None, 
+            target_sample_id_col=self.config.input.sample_id_col,
+            target_match_sample_id_col=self.config.input.match_sample_id_col)
+                
+        # print(f"Loading sample sheet {self.config.input.sample_sheet_name}...")
+        # sample_sheet_df = sheet_to_df(input_xl[self.config.input.sample_sheet_name])
+        # sample_sheet_df[self.config.input.sample_short_description_col] = self.sites.get_type_short_description(sample_sheet_df[self.config.input.sample_type_col]) if self.sites is not None else ""
+        # sample_sheet_df[self.config.input.sample_description_col] = self.sites.get_type_description(sample_sheet_df[self.config.input.sample_type_col]) if self.sites is not None else ""
 
-        # Add sample data to measure sheet
-        self.measure_sheet_df = self.measure_sheet_df.join(sample_sheet_df.set_index(self.config.input.sample_id_col).add_prefix(f"{self.config.input.sample_sheet_name}_"), on=self.config.input.sample_id_col, how="left")
-        self.measure_sheet_df[f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"] = self.measure_sheet_df[f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"].fillna(self.config.input.unknown_site)
+        # Add samples log data to QPCR sheet
+        self.qpcr_df = self.sampleslog.join_and_cast(self.qpcr_df, on=self.config.input.match_sample_id_col)
+        
+        # Populate site ID, based on the sample ID
+        self.qpcr_df[self.config.input.site_id_col] = self.qpcr_df[self.config.input.sample_id_col].apply(self.sites.get_siteid_from_sampleid)
 
-        # Set the plate IDs
-        def _get_plate_id(index):
-            return "" if index is None else index.split("-")[0]
-        self.measure_sheet_df[self.config.input.plate_id_col] = self.measure_sheet_df[self.config.input.index_col].map(_get_plate_id)
-        # Set the standard curve IDs
+        # Add sample type info (eg. pSludge, pEfflu, water, etc)
+        self.qpcr_df[self.config.input.sampling_type_col] = self.sites.get_site_sample_type(self.qpcr_df[self.config.input.site_id_col])
+        self.qpcr_df[self.config.input.sample_short_description_col] = self.sites.get_type_short_description(self.qpcr_df[self.config.input.sampling_type_col]) if self.sites is not None else ""
+        self.qpcr_df[self.config.input.sample_description_col] = self.sites.get_type_description(self.qpcr_df[self.config.input.sampling_type_col]) if self.sites is not None else ""
+
         self.assign_standard_curve_ids()
+        
+        # Create (overwrite) sample IDs for all std entries.
+        std_filt = self.qpcr_df[self.config.input.measure_type_col] == self.config.input.measure_type_std
+        self.qpcr_df.loc[std_filt, self.config.input.sample_id_col] = self.qpcr_df[std_filt][[self.config.input.sq_col, self.config.input.plate_id_col]].agg(lambda x: f"{x[1]}-{x[0]}", axis=1)
 
-        # self.measure_sheet_df[self.config.input.group_col] = pd.to_numeric(self.measure_sheet_df[self.config.input.index_col].map(lambda x: x.split("-")[0] if x else ""), errors="coerce")
-        # self.measure_sheet_df[self.config.input.index_col] = pd.to_numeric(self.measure_sheet_df[self.config.input.index_col].map(lambda x: x.split("-")[1] if x else ""), errors="coerce")
-
-        # Add the dates of the samples to the measure sheet (obtained from the samples ODM table)
-        # self.measure_sheet_df[self.config.input.measure_sample_date_col] = self.measure_sheet_df[self.config.input.sample_id_col].map(self.get_sample_date)
-        # Convert gene names to recognized ones
-        self.measure_sheet_df[self.config.input.gene_type_col] = self.measure_sheet_df[self.config.input.gene_type_col].map(self.get_recognized_gene)
-        # Drop unrecognized genes
-        # self.measure_sheet_df = self.measure_sheet_df.dropna(subset=[self.config.input.gene_type_col])
-
-        def _parse_index(idx):
-            if idx is None:
-                return idx
-            if isinstance(idx, str):
-                comps = idx.split("-")
-                if len(comps) == 2:
-                    return comps[1]
-                return idx
-            return idx
-        self.measure_sheet_df[self.config.input.index_col] = self.measure_sheet_df[self.config.input.index_col].map(_parse_index)
-        # print(self.measure_sheet_df[self.config.input.index_col])
-
-        # Cast values to floats
-        self.measure_sheet_df[self.config.input.value_col] = self.measure_sheet_df[self.config.input.value_col].astype(np.float64)
-
-        self.measure_sheet_df = self.measure_sheet_df.sort_values(self.config.input.order_by)
+        # Convert target names to recognized ones
+        self.qpcr_df[self.config.input.target_col] = self.qpcr_df[self.config.input.target_col].map(self.get_recognized_target)
+        
+        #  Set the index. This allows us to preserve the original ordering if needed
+        for group_name, group_df in self.qpcr_df.groupby([self.config.input.target_col, self.config.input.sample_id_col, self.config.input.measure_type_col]):
+            self.qpcr_df.loc[group_df.index, self.config.input.index_col] = list(np.arange(0, len(group_df.index)))
+        
+        self.qpcr_df = self.qpcr_df.sort_values(self.config.input.order_by)
 
         # Prepare reruns.
-        self.measure_sheet_df = self.prepare_reruns(self.measure_sheet_df)
+        self.qpcr_df = self.prepare_reruns(self.qpcr_df)
 
-        # Create groupID column (based on index: groupid-idx)
-        # self.measure_sheet_df[self.GROUP_ID_COL] = self.measure_sheet_df[self.config.input.index_col].map(lambda x: x.split("-")[0])
+        # Create blank outliers column. Will populate outliers later on
+        self.qpcr_df[OUTLIER_COL] = None
 
-        self.measure_sheet_df[OUTLIER_COL] = None
-
-        # Remove the Time component of some Datetime columns
-        if "remove_time_cols" in self.config.input:
-            remove_time_cols = self.config.input.remove_time_cols
-            if isinstance(remove_time_cols, str):
-                remove_time_cols = [remove_time_cols]
-            for col in remove_time_cols:
-                self.measure_sheet_df[col] = pd.to_datetime(self.measure_sheet_df[col]).dt.date
-
-        # Go through each output file for our data. The output files are determined by the tags
-        # in the target_file passed to the constructor, which has different tags (eg. {site_id},
-        # {site_title}, etc.). We usually put everything in a single output file, or we have
-        # one output file per site.
-        for file_info, file_group_df in self.make_file_splits(self.measure_sheet_df):
+        # Split the QPCR data into groups. Each group represents a single output file.
+        for file_info, file_group_df in self.make_file_splits(self.qpcr_df):
             target_file = file_info["fileName"]
             local_target_file = cloud_utils.download_file(target_file)
             target_dir = os.path.dirname(local_target_file) if local_target_file else ""
@@ -2065,8 +1944,8 @@ class QPCRPopulator(object):
 
                 group = group.copy()
                 # self.remove_all_outliers(group)
-                self.qaqc.remove_all_outliers(group, self.measure_sheet_df)
-                if not self.create_main(group):
+                self.qaqc.remove_all_outliers(group, self.qpcr_df)
+                if not self.create_main(name, group):
                     continue
                 main_has_data = True
                 self.create_calibration(group)
@@ -2074,7 +1953,7 @@ class QPCRPopulator(object):
                 self.handle_late_binders(inner=True)
                 self.handle_late_binders(inner=False)
                 if not self.hide_qaqc:
-                    self.qaqc.run_qaqc(self.output_wb, group, self.measure_sheet_df)
+                    self.qaqc.run_qaqc(self.output_wb, group, self.qpcr_df)
                     self.qaqc.add_qaqc_to_workbook(self.output_wb)
                 self.remove_non_main_sheets_info()
                 
@@ -2113,34 +1992,37 @@ class QPCRPopulator(object):
 if __name__ == "__main__":
     if "get_ipython" in globals():
         opts = EasyDict({
-            # Ottawa B117
-            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-jan6.xlsx",
-            "template_file" : "qpcr_template_ottawa_b117.xlsx",
-            "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_b117_diff.yaml"],
-            "qaqc" : "qaqc_ottawa_b117.yaml",
-
-            # Ottawa Wide
-            # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-dec6.xlsx",
-            # # "input_file" : "odmdata/odm_merged-test.xlsx",
-            # "template_file" : "qpcr_template_ottawa_wide.xlsx",
-            # "config" : ["qpcr_populator_ottawa.yaml", "qpcr_populator_ottawa_wide_diff.yaml"],
-            # "qaqc" : ["qaqc_ottawa.yaml", "qaqc_ottawa_wide_diff.yaml"],
-
-            # Ottawa Long
+            # B117
             # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odmdata/odm_merged-jan6.xlsx",
-            # # "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code//odmdata-2021-08-10-12_04_38-000.xlsx",
-            # "template_file" : "qpcr_template_ottawa.xlsx",
-            # "config" : ["qpcr_populator_ottawa.yaml"],
-            # "qaqc" : ["qaqc_ottawa.yaml"],
+            # "template_file" : "qpcr_template_b117.xlsx",
+            # "config" : ["qpcr_populator_long-2main-inh.yaml", "qpcr_populator_b117_diff.yaml"],
+            # "qaqc" : "qaqc_b117.yaml",
 
-            # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test/{site_parent_title}/populated - {site_parent_title} - Test.xlsx",
-            # "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/{parent_site_title}/out-aug9 - {parent_site_title} - {site_id}.xlsx",
-            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/jan6.xlsx",
+            "input_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/output/extracted-merged.xlsx",
+
+            # Long format
+            "template_file" : "qpcr_template_long-2main-inh.xlsx",
+            "config" : ["qpcr_populator_long-2main-inh.yaml"],
+            "qaqc" : ["qaqc_long-2main-inh.yaml"],
+
+            # Wide format
+            # "template_file" : "qpcr_template_wide-2main-inh.xlsx",
+            # "config" : ["qpcr_populator_long-2main-inh.yaml", "qpcr_populator_wide_diff-2main-inh.yaml"],
+            # "qaqc" : ["qaqc_long-2main-inh.yaml", "qaqc_wide_diff-2main-inh.yaml"],
+
+            "target_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/output/output.xlsx",
             "hide_qaqc" : False,
             "overwrite" : True,
 
-            "sites_config" : "sites.yaml",
-            "sites_file" : "sites.xlsx",
+            "sites_config" : "qpcr_sites.yaml",
+            "sites_file" : "qpcr_sites.xlsx",
+            
+            "sampleids_config" : "qpcr_sampleids.yaml",
+            "sampleslog_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/COVID SAMPLE LOG SHEET-2-7.xlsx",
+            "sampleslog_config" : "qpcr_sampleslog.yaml",
+            
+            "methods_config" : "qpcr_methods.yaml",
+            "methods_file" : "/Users/martinwellman/Documents/Health/Wastewater/Code/odm-qpcr-analyzer/qpcr_analyzer/qpcr_methods.xlsx",
         })
     else:
         args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -2148,11 +2030,16 @@ if __name__ == "__main__":
         args.add_argument("--qaqc", nargs="+", type=str, help="Configuration file for QAQC. Skip QAQC if not specified.", required=False)
         args.add_argument("--template_file", type=str, help="Template Excel file for format of rows added to the final output", required=True)
         args.add_argument("--target_file", type=str, help="Target Excel file to save the final, formatted output to.", required=True)
-        args.add_argument("--config", nargs="+", type=str, help="Configuration file", default="qpcr_populator_ottawa.yaml")
+        args.add_argument("--config", nargs="+", type=str, help="Configuration file", default="qpcr_populator_long-2main-inh.yaml")
         args.add_argument("--overwrite", help="If set then overwrite the target_file (instead of appending to it).", action="store_true")
         args.add_argument("--hide_qaqc", help="If set then do not show QAQC highlighting or sheets. Outliers will still be removed and marked with square brackets.", action="store_true")
-        args.add_argument("--sites_file", type=str, help="Excel file specifying all WW sites with information about each site.", required=False)
-        args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=False)
+        args.add_argument("--sites_config", type=str, help="Config file for the sites file.", required=True)
+        args.add_argument("--sites_file", type=str, help="Excel file specifying all WW sites with information about each site.", required=True)
+        args.add_argument("--sampleids_config", type=str, help="Config file for the sample IDs.", required=True)
+        args.add_argument("--sampleslog_config", type=str, help="Config file for the samples log file.", required=True)
+        args.add_argument("--sampleslog_file", type=str, help="Log file for the samples, containing sample mass, analysis date, etc.", required=True)
+        args.add_argument("--methods_config", type=str, help="Config file for the methods.", required=True)
+        args.add_argument("--methods_file", type=str, help="Excel file with all the method definitions", required=True)
         
         opts = args.parse_args()
 
@@ -2167,6 +2054,11 @@ if __name__ == "__main__":
         opts.qaqc, 
         sites_config=opts.sites_config, 
         sites_file=opts.sites_file, 
+        sampleids_config=opts.sampleids_config,
+        sampleslog_config=opts.sampleslog_config,
+        sampleslog_file=opts.sampleslog_file,
+        methods_config=opts.methods_config,
+        methods_file=opts.methods_file,
         hide_qaqc=opts.hide_qaqc
         )
     qpcr.populate()
@@ -2174,5 +2066,3 @@ if __name__ == "__main__":
     print("Started at:", tic)
     print("Ended at:", toc)
     print("Total duration:", toc - tic)
-
-

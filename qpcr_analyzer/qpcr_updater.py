@@ -45,14 +45,14 @@ import gdrive_utils
 from qpcr_utils import (
     load_config,
 )
-from fix_xlsx import fix_xlsx_file
+from excel_file_utils import fix_xlsx_file
 from excel_calculator import add_excel_calculated_values
 import tempfile
 from copy import copy
 from qpcr_sites import QPCRSites
 
-import logging
-logging.getLogger("pycel").setLevel(logging.CRITICAL)
+# import logging
+# logging.getLogger("pycel").setLevel(logging.CRITICAL)
 
 class QPCRUpdater(object):
     def __init__(self, config_file, populator_config_file, sites_config, sites_file):
@@ -301,20 +301,13 @@ if __name__ == "__main__":
         opts = EasyDict({
             "input_files" : [
                 "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/sep10/Data - <unk>.xlsx",
-                # "/Users/martinwellman/Documents/Health/Wastewater/Code/temp.xlsx",
-                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Uottawa.xlsx",
-                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Ottawa.xlsx",
-                # "/Users/martinwellman/Documents/Health/Wastewater/Code/populated-wide/Data - Nippising (First Nations).xlsx",
             ],
-            # "target_dir" : "gd://{parent_site_title}/",
-            # "target_dir" : "gd://hidden_test/",
             "target_dir" : "/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/new/",
-            # "target_path_template" : "Data - {parent_site_title}.xlsx",
             "target_path_template" : "Data - All - {parent_site_title}.xlsx",
             "config" : "qpcr_updater.yaml",
-            "populator_config" : "qpcr_populator_ottawa.yaml",
-            "sites_config" : "sites.yaml",
-            "sites_file" : "sites.xlsx",
+            "populator_config" : "qpcr_populator_long-2main-inh.yaml",
+            "sites_config" : "qpcr_sites.yaml",
+            "sites_file" : "qpcr_sites.xlsx",
         })
     else:
         args = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

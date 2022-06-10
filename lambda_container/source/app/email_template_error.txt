@@ -15,7 +15,7 @@ There was an error while running the ODM QPCR Analyzer. Details of the error are
 [[/settings]]For assistance, please contact {admin_email}.
 
 -----
+Executed on: {executed_on}
 Total runtime: {runtime}
 Run ID: {runid}
 Instance ID: {instanceid}
-Instance Runs: {instanceruns}

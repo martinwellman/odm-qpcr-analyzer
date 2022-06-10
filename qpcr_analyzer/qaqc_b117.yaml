@@ -50,7 +50,7 @@ no_detections : [
         description : "Samples require amplification",
         priority : "Very Low",
         columns : ["main_col_ct", "main_col_ct_b", "main_col_ct_c"],
-        genes : [],
+        targets : [],
         min_detections : 1,
         individual_columns : True,
     }
@@ -64,7 +64,7 @@ main_ct_outliers : [
         range : [ NULL, 40 ],
         # min_replicates : 2,
         # max_replicates : 3,
-        genes : [ ],
+        targets : [ ],
         columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
     },
     # {
@@ -74,7 +74,7 @@ main_ct_outliers : [
     #     max_stdev : 0.5,
     #     min_replicates : 2,
     #     max_replicates : 3,
-    #     genes : [ ],
+    #     targets : [ ],
     #     columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
     # },
 ]
@@ -88,7 +88,7 @@ main_ct_outliers : [
 #     max_stdev : 0.5,
 #     min_replicates : 2,
 #     max_replicates : 3,
-#     genes : [ ],
+#     targets : [ ],
 #     columns : [ "main_col_ct", "main_col_ct_b", "main_col_ct_c" ],
 # }
 

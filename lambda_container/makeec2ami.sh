@@ -8,8 +8,10 @@ if [ "$AWS_ACCESS_KEY_ID" == "" ]; then
     exit 1
 fi
 
-# This image ID is for "Amazon Linux 2 AMI (HVM), SSD Volume Type (64-bit x86)"
-IMAGE_ID=ami-0dc2d3e4c0f9ebd18
+# "Amazon Linux 2 AMI (HVM), SSD Volume Type (64-bit x86)" in us-east-1
+# IMAGE_ID=ami-0dc2d3e4c0f9ebd18
+# "Amazon Linux 2 AMI (HVM) - Kernel 5.10, SSD Volume Type" in ca-central-1
+IMAGE_ID=ami-0843f7c45354d48b5
 INSTANCE_TYPE=t2.micro
 RUN_SCRIPT=ec2amisetup.sh
 

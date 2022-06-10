@@ -3,26 +3,23 @@
 # %autoreload 2
 
 """
-app.py
-======
+# app.py
 
 Main Lambda function code for QPCR Analyzer.
 
 The Lambda entry point is the function handler() below.
 
-Flow
-----
+## Flow
 
 1. handler()
     1. Get settings from the event, and download all input and config files
     2. Run QPCRUpdater on all input files if remote_target is set. For any files that the updater recognizes, it will
        update the remote targets. All other files (that the updater doesn't recognize) will be passed on to the extracter.
     3. Run QPCRExtracter to extract all data from the input.
-    4. Run BioRadMapper to map the extracted files to ODM format.
-    5. Run QPCRPopulator to create all the output reports.
-    6. Run QPCRUpdater again on the QPCRPopulator output (if remote_target is set), to add any new reports to the remote
+    4. Run QPCRPopulator to create all the output reports.
+    5. Run QPCRUpdater again on the QPCRPopulator output (if remote_target is set), to add any new reports to the remote
        targets.
-    7. Create the email with all attachments and send it to the user.
+    6. Create the email with all attachments and send it to the user.
 """
 
 import os
@@ -43,13 +40,13 @@ import gdrive_utils
 from emailer import send_email, verify_emails
 import yaml
 from easydict import EasyDict
+import traceback
 
 gdrive_utils.set_allow_flow(False)
 
 from qpcr_populator import QPCRPopulator
 from qpcr_extracter import QPCRExtracter
 from qpcr_updater import QPCRUpdater
-from wbe_odm.odm_mappers.biorad_mapper import BioRadMapper
 from qpcr_utils import (
     QPCRError,
     cleanup_file_name,
@@ -60,8 +57,10 @@ SEND_EMAIL_ON_ERROR = True
 DISABLE_ALL_EMAILS = False
 TEMP_DIR = None            # Set to None (preferred) to get a new tempdir with tempfile.gettempdir()
 OVERRIDE_RUNID = None      # Set to None (preferred) to create a new unique run ID
-DELETE_TEMP_DIR = True     # Set to True (preferred) to delete the temp dir once done
+DELETE_TEMP_DIR = False     # Set to True (preferred) to delete the temp dir once done
 UPLOAD_RESULTS = True      # Set to True to upload outputs to S3 for long-term storage
+INCLUDE_STACK_TRACE_ON_ERROR = False  # Set to True to include a stack trace in the email when an error occurs
+                                      # Note that for unknown errors the stack trace is ALWAYS included
 
 # Will be retrieved from the passed in parameter "output_debug"
 OUTPUT_DEBUG = False
@@ -74,24 +73,28 @@ DEFAULT_FROM_EMAIL = "ODM QPCR Analyzer <odm@cryotoad.com>"
 
 GOOGLE_DOCS_URL = "https://docs.google.com/spreadsheets/d/{file_id}/"
 EXTRACTED_FILE = "extracted-{datetime}-{num:03n}.xlsx"
-ODMDATA_FILE = "odmdata-{datetime}-{num:03n}.xlsx"
-MAPPED_DIR = "odmdata"
-DEFAULT_POPULATED_OUTPUT_FILE = "Data - {site_parent_title}.xlsx"
-DEFAULT_EXTRACTER_CONFIG = "qpcr_extracter_ottawa.yaml"
-DEFAULT_POPULATOR_CONFIG = "qpcr_populator_ottawa.yaml"
-DEFAULT_UPDATER_CONFIG = "qpcr_updater.yaml"
-DEFAULT_QAQC_CONFIG = "qaqc_ottawa.yaml"
-DEFAULT_MAPPER_CONFIG = "biorad_mapper.yaml"
-DEFAULT_MAPPER_MAP = "biorad_map.csv"
-DEFAULT_POPULATOR_TEMPLATE = "qpcr_template_ottawa.xlsx"
-DEFAULT_SITES_FILE = "sites.xlsx"
-DEFAULT_SITES_CONFIG = "sites.yaml"
+DEFAULT_POPULATED_OUTPUT_FILE = None #"Data - {site_parent_title}.xlsx"
+DEFAULT_EXTRACTER_CONFIG = None #"qpcr_extracter.yaml"
+DEFAULT_EXTRACTER_FORMAT_CONFIGS = None
+DEFAULT_POPULATOR_CONFIG = None #"qpcr_populator_long-2main-inh.yaml"
+DEFAULT_UPDATER_CONFIG = None #"qpcr_updater.yaml"
+DEFAULT_QAQC_CONFIG = None #"qaqc_long-2main-inh.yaml"
+DEFAULT_POPULATOR_TEMPLATE = None #"qpcr_template_long-2main-inh.xlsx"
+DEFAULT_SITES_FILE = None #"qpcr_sites.xlsx"
+DEFAULT_SITES_CONFIG = None #"qpcr_sites.yaml"
 DEFAULT_EMAIL_TEMPLATE_HTML = "email_template.html"
 DEFAULT_EMAIL_TEMPLATE_TEXT = "email_template.txt"
 DEFAULT_EMAIL_TEMPLATE_ERROR_HTML = "email_template_error.html"
 DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT = "email_template_error.txt"
 DEFAULT_OUTPUT_PATH = "s3://odm-qpcr-analyzer/outputs"
 DEFAULT_CREDENTIALS_FILE = "credentials.json"
+
+DEFAULT_METHODS_CONFIG = None
+DEFAULT_METHODS_FILE = None
+
+DEFAULT_SAMPLEIDS_CONFIG = None
+DEFAULT_SAMPLESLOG_CONFIG = None
+DEFAULT_SAMPLESLOG_FILE = None
 
 ERROR_SUBJECT = "Error from ODM QPCR Analyzer ({username}, {output_format_description})"
 EMAIL_SUBJECT = "QPCR Reports ({username}, {output_format_description})"
@@ -117,7 +120,8 @@ def make_zip_file(file_name, *files):
         os.makedirs(dir, exist_ok=True)
     with ZipFile(file_name, "w") as zip:
         for file in files:
-            zip.write(file, os.path.basename(file))
+            if file and os.path.exists(file):
+                zip.write(file, os.path.basename(file))
 
 def make_email_lists(items):
     """Make an HTML and plain text list of items, to be used in emails.
@@ -285,7 +289,7 @@ def format_file_name(file, clean_name=True, **kwargs):
         All the tags and values for passing to str.format. In addition to these we add the tags date=RUNDATETIME(year-month-day),
         time=RUNDATETIME(time), datetime=RUNDATETIME(year and time).
     """
-    name = parse_values(file,
+    name = parse_values(file, None,
         date=cleanup_file_name(RUNDATETIME.strftime("%Y-%m-%d")),
         time=cleanup_file_name(RUNDATETIME.strftime("%H:%M:%S")),
         datetime=cleanup_file_name(RUNDATETIME.strftime("%Y-%m-%d_%H:%M:%S")),
@@ -374,10 +378,17 @@ def send_error_email(to_emails, email_template_html, email_template_text, messag
     if not SEND_EMAIL_ON_ERROR or DISABLE_ALL_EMAILS:
         return
 
-    stack_trace = traceback.format_exc().strip()
+    if include_stack_trace:
+        stack_trace = traceback.format_exc().strip()        
+        attachments = [{
+            "contents" : stack_trace,
+            "filename" : "stacktrace.txt",
+        }]
+    else:
+        attachments = None
     
-    email_html, email_text = parse_email_templates(email_template_html, email_template_text, messages=messages, stack_trace=stack_trace, **kwargs)
-    send_email(DEFAULT_FROM_EMAIL, to_emails, format_subject(ERROR_SUBJECT), email_html, email_text)
+    email_html, email_text = parse_email_templates(email_template_html, email_template_text, messages=messages, **kwargs)
+    send_email(DEFAULT_FROM_EMAIL, to_emails, format_subject(ERROR_SUBJECT), email_html, email_text, attachments=attachments)
 
 def add_debug_info(info):
     """Add debug info to the passed in list. This includes the Python version number, versions of some packages, Lambda function version,
@@ -431,6 +442,7 @@ def handler(event, context):
     OUTPUT_DEBUG = True
     temp_root = None
     start_time = datetime.now()
+    executed_on = RUNDATETIME.strftime("%Y-%m-%d %H:%M:%S")
     email_template_error_text = DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT
     email_template_error_html = DEFAULT_EMAIL_TEMPLATE_ERROR_HTML
     try:
@@ -440,8 +452,7 @@ def handler(event, context):
         settings = event.get("descriptive_settings", [])
         if OUTPUT_DEBUG:
             add_debug_info(settings)
-        settings.append("Executed on: {}".format(RUNDATETIME.strftime("%Y-%m-%d %H:%M:%S")))
-
+        
         input_files = event.get("inputs", None)
         populated_output_file = event.get("populated_output_file", DEFAULT_POPULATED_OUTPUT_FILE)
         output_path = event.get("output_path", DEFAULT_OUTPUT_PATH)
@@ -457,7 +468,7 @@ def handler(event, context):
         hide_qaqc = event.get("hide_qaqc", False)
 
         if not input_files:
-            raise QPCRError("No input files specified.")
+            raise QPCRError("No input files specified. Please upload some files before running the app.")
         elif not output_path:
             raise QPCRError("No output path specified")
         # elif not to_emails:
@@ -473,13 +484,20 @@ def handler(event, context):
             """Download one or more files. The return result is the local paths of the files from downloading.
             description is just for informational output (ie. if an error occurs).
             """
+            if files is None:
+                if exception_on_error:
+                    raise QPCRError(f"File for {description} was not specified.")
+                return None
             if isinstance(files, str):
                 files = [files]
             results = []
             for file in files:
                 result = cloud_utils.download_file(file, target_dir=temp_root)
                 if exception_on_error and not result:
-                    raise QPCRError(f"Could not retrieve {description} file: {file}")
+                    error_msg = f"Could not retrieve {description} file: {file}\n\nPlease ensure the file exists."
+                    if cloud_utils.is_on_google_drive(file):
+                        error_msg += " Since this file resides on Google Drive, make sure you have signed in with Google and your account has access to the file."
+                    raise QPCRError(error_msg)
                 results.append(result)
             if len(results) == 1:
                 return results[0]
@@ -494,7 +512,8 @@ def handler(event, context):
             gdrive_utils.set_partial_token_data(tokens)
 
         # Download all the files
-        samples = _download(event.get("samples", None), "samples data sheet")
+        print("-"*20)
+        print("Downloading files...")
         email_template_text = _download(event.get("email_template_text", None) or DEFAULT_EMAIL_TEMPLATE_TEXT, "Text email template", exception_on_error=False)
         email_template_html = _download(event.get("email_template_html", None) or DEFAULT_EMAIL_TEMPLATE_HTML, "HTML email template", exception_on_error=False)
         email_template_error_text = _download(event.get("email_template_error_text", None) or DEFAULT_EMAIL_TEMPLATE_ERROR_TEXT, "Text error email template", exception_on_error=False)
@@ -502,12 +521,18 @@ def handler(event, context):
         sites_file = _download(event.get("sites_file", None) or DEFAULT_SITES_FILE, "site definitions")
         sites_config = _download(event.get("sites_config", None) or DEFAULT_SITES_CONFIG, "sites configuration")
         extracter_config = _download(event.get("extracter_config", None) or DEFAULT_EXTRACTER_CONFIG, "extracter config")
+        extracter_format_configs = _download(event.get("extracter_format_configs", None) or DEFAULT_EXTRACTER_FORMAT_CONFIGS, "extracter format configs")
         populator_config = _download(event.get("populator_config", None) or DEFAULT_POPULATOR_CONFIG, "populator config")
-        updater_config = _download(event.get("updater_config", None) or DEFAULT_UPDATER_CONFIG, "updater config")
+        updater_config = _download(event.get("updater_config", None) or DEFAULT_UPDATER_CONFIG, "updater config", exception_on_error=remote_target)
         qaqc_config = _download(event.get("qaqc_config", None) or DEFAULT_QAQC_CONFIG, "QA/QC config")
-        mapper_config = _download(event.get("mapper_config", None) or DEFAULT_MAPPER_CONFIG, "ODM mapper config")
-        mapper_map = _download(event.get("mapper_map", None) or DEFAULT_MAPPER_MAP, "ODM mapper CSV")
         populator_template = _download(event.get("populator_template", None) or DEFAULT_POPULATOR_TEMPLATE, "populator template")
+
+        sampleids_config = _download(event.get("sampleids_config", None) or DEFAULT_SAMPLEIDS_CONFIG, "sample IDs config")
+        sampleslog_config = _download(event.get("sampleslog_config", None) or DEFAULT_SAMPLESLOG_CONFIG, "samples log config")
+        sampleslog_file = _download(event.get("sampleslog_file", None) or DEFAULT_SAMPLESLOG_FILE, "samples log")
+
+        methods_config = _download(event.get("methods_config", None) or DEFAULT_METHODS_CONFIG, "methods config")
+        methods_file = _download(event.get("methods_file", None) or DEFAULT_METHODS_FILE, "methods")
 
         local_input_files = []
         # local_inputed_output_files is all input files (uploaded by the user) that are actually output files
@@ -524,6 +549,8 @@ def handler(event, context):
         # append each row to the correct remote target output file based on its site ID column.
         updater = None
         if remote_target:
+            print("-"*20)
+            print("Identifying output files...")
             updater = QPCRUpdater(updater_config, 
                 populator_config, 
                 sites_config=sites_config, 
@@ -536,43 +563,30 @@ def handler(event, context):
             local_input_files = [f for f,is_output in zip(local_input_files, is_output_files) if not is_output]
 
         # Run extracter
+        print("-"*20)
+        print("Running extracter...")
         output_file = format_file_name(EXTRACTED_FILE, num=0)
-        extracter = QPCRExtracter(local_input_files,
-            os.path.basename(output_file),
-            os.path.join(temp_root, os.path.dirname(output_file)),
-            samples, 
-            extracter_config, 
-            sites_config=sites_config,
-            sites_file=sites_file,
-            upload_to=None, 
-            overwrite=True,
-            save_raw=True)
-        local_input_files, extracted_files, raw_files, upload_files = extracter.extract()
-
-        # Run mapper
-        mapped_files = []
-        for num, extracted_file in enumerate(extracted_files):
-            mapper = BioRadMapper(config_file=mapper_config)
-            mapper.read(extracted_file,
-                        "", # Static path
-                        map_path=mapper_map,
-                        remove_duplicates=True,
-                        startdate="", 
-                        enddate="")
-
-            mapped_file, _ = mapper.save_all(os.path.join(temp_root, format_file_name(ODMDATA_FILE, num=num)), duplicates_file=None)
-            mapped_files.append(mapped_file)
+        extracter = QPCRExtracter(
+            extracter_config,
+            extracter_format_configs)
+        merged_extracted_file, extracted_files, raw_files, format_names = extracter.extract(
+            local_input_files, 
+            os.path.join(temp_root, os.path.dirname(output_file)), 
+            os.path.join(temp_root, os.path.dirname(output_file), "raw"), 
+            merged_file_name=output_file)
 
         # Run populator
+        print("-"*20)
+        print("Running populator...")
+        # We add remote_target to the output path because grouping of sites depends on what
+        # the output file name and path are. Sites with the same output file are grouped together. remote_target might
+        # have tags (eg. {site_id}, {parent_site_title}, etc) that affect the filename and hence the grouop.
+        output_file = os.path.join(temp_root, cloud_utils.remove_prefix(remote_target), populated_output_file)
+        output_file = format_file_name(output_file, num=0, clean_name=False)
         populated_files = []
-        for num, mapped_file in enumerate(mapped_files):
-            # We add remote_target to the output path because grouping of sites depends on what
-            # the output file name and path are. Sites with the same output file are grouped together. remote_target might
-            # have tags (eg. {site_id}, {parent_site_title}, etc) that affect the filename and hence the grouop.
-            output_file = os.path.join(temp_root, cloud_utils.remove_prefix(remote_target), populated_output_file)
-
-            output_file = format_file_name(output_file, num=num, clean_name=False)
-            qpcr = QPCRPopulator(input_file=mapped_file,
+        output_files = []
+        if merged_extracted_file:
+            qpcr = QPCRPopulator(input_file=merged_extracted_file,
                 template_file=populator_template, 
                 target_file=output_file, 
                 overwrite=False, 
@@ -580,13 +594,20 @@ def handler(event, context):
                 qaqc_config_file=qaqc_config,
                 sites_config=sites_config,
                 sites_file=sites_file,
+                sampleids_config = sampleids_config, 
+                sampleslog_config = sampleslog_config, 
+                sampleslog_file = sampleslog_file,
+                methods_config=methods_config,
+                methods_file=methods_file,
                 hide_qaqc=hide_qaqc)
             output_files = qpcr.populate()
-            populated_files.extend(output_files)
+        populated_files.extend(output_files)
 
         # Update remote target files on Google Drive with the new output from the populator
         updated_file_urls = []
         if updater is not None:
+            print("-"*20)
+            print("Updating on Google Drive...")
             _ = updater.update(local_inputed_output_files + populated_files, os.path.join(remote_target, populated_output_file))
             updated_targets = updater.save_and_upload()
             for updated_target in updated_targets:
@@ -596,8 +617,13 @@ def handler(event, context):
                 
         # Upload all results to S3, for longer term storage
         if UPLOAD_RESULTS:
-            upload_files = list(dict.fromkeys([*extracted_files, *mapped_files, *populated_files, *raw_files]))
+            print("-"*20)
+            print("Uploading results...")
+            upload_files = list(dict.fromkeys([*extracted_files, merged_extracted_file, *populated_files, *raw_files]))
+            upload_files = [f for f in upload_files if f]
             for upload_file in upload_files:
+                if not upload_file:
+                    continue
                 if cloud_utils.is_s3(output_path):
                     print(f"Uploading file {upload_file}")
                     try:
@@ -611,6 +637,8 @@ def handler(event, context):
 
         # Create ZIP files of the input files and the files extracted from the BioRad PDFs. We'll attach these
         # to the email.
+        print("-"*20)
+        print("Creating ZIP files...")
         inputs_zip_file = None
         extracted_zip_file = None
         if len(local_inputed_output_files) > 0 or len(local_input_files) > 0:
@@ -628,19 +656,24 @@ def handler(event, context):
         end_time = datetime.now()
 
         # Email results
+        print("-"*20)
+        print("Sending results...")
         if len(unverified_emails) > 0:
             print("WARNING: Not sending to unverified emails:", ", ".join(unverified_emails))
         if to_emails is not None and to_emails != "" and not DISABLE_ALL_EMAILS:
+            input_files_with_format = [os.path.basename(f) for f in local_input_files]
+            input_files_with_format = [f"{format_name}: {f}" if format_name else f for f, format_name in zip(input_files_with_format, format_names)]
             template_params = {
-                "report_files" : [os.path.basename(f) for f in populated_files],
-                "input_files" : [os.path.basename(f) for f in local_input_files + local_inputed_output_files],
-                "raw_files" : [os.path.basename(f) for f in raw_files],
+                "report_files" : [os.path.basename(f) for f in populated_files if f],
+                "input_files" : input_files_with_format + [os.path.basename(f) for f in local_inputed_output_files if f],
+                "raw_files" : [os.path.basename(f) for f in raw_files if f],
                 "settings" : settings,
                 "updated_files" : updated_file_urls,
                 "inputs_zip_file" : os.path.basename(inputs_zip_file) if inputs_zip_file else None,
                 "raw_zip_file" : os.path.basename(extracted_zip_file) if extracted_zip_file else None,
                 "start_time" : start_time,
                 "runtime" : end_time - start_time,
+                "executed_on" : executed_on,
                 "admin_email" : ADMIN_EMAIL,
                 "runid" : RUNID,
                 "instanceid" : INSTANCEID,
@@ -652,25 +685,26 @@ def handler(event, context):
         # Custom errors: Text of the error is a string of a JSON array. Each item in the array is either text or an array
         # of text. The error email will have all text, separated by breaks, and all subarrays converted to pretty lists.
         print(f"Custom exception running app: {e}")
-        msg = str(e)
-        comps = [msg]
-        try:
-            comps = json.loads(msg)
-        except:
-            pass
+        
+        comps = e.args
+        if not comps:
+            comps = [str(e)]
         end_time = datetime.now()
         print("Sending error email:", comps)
-        send_error_email(to_emails, email_template_error_html, email_template_error_text, messages=comps, settings=settings, start_time=start_time, runtime=end_time - start_time, admin_email=ADMIN_EMAIL, runid=RUNID, instanceid=INSTANCEID, instanceruns=INSTANCERUNS, include_stack_trace=True)
+        if ADMIN_EMAIL not in to_emails:
+            to_emails.append(ADMIN_EMAIL)
+        send_error_email(to_emails, email_template_error_html, email_template_error_text, messages=comps, settings=settings, start_time=start_time, executed_on=executed_on, runtime=end_time - start_time, admin_email=ADMIN_EMAIL, runid=RUNID, instanceid=INSTANCEID, instanceruns=INSTANCERUNS, include_stack_trace=INCLUDE_STACK_TRACE_ON_ERROR)
         return {
             "statusCode" : 500
         }
     except Exception as e:
         # Unknown exception, show the full stack trace
-        print(f"Exception running app: {e}")
+        print(f"Unknown exception running app: {e}")
+        traceback.print_exc()
         end_time = datetime.now()
         if ADMIN_EMAIL not in to_emails:
             to_emails.append(ADMIN_EMAIL)
-        send_error_email(to_emails, email_template_error_html, email_template_error_text, messages=None, settings=settings, start_time=start_time, runtime=end_time - start_time, admin_email=ADMIN_EMAIL, runid=RUNID, instanceid=INSTANCEID, instanceruns=INSTANCERUNS, include_stack_trace=True)
+        send_error_email(to_emails, email_template_error_html, email_template_error_text, messages=["Unknown error running app:", str(e)], settings=settings, start_time=start_time, executed_on=executed_on, runtime=end_time - start_time, admin_email=ADMIN_EMAIL, runid=RUNID, instanceid=INSTANCEID, instanceruns=INSTANCERUNS, include_stack_trace=True)
         return {
             "statusCode" : 500
         }
@@ -679,6 +713,7 @@ def handler(event, context):
             print(f"Deleting temporary folder {temp_root}")
             shutil.rmtree(temp_root)
         
+    print("-"*20)
     print("Finished!")
 
     return {
@@ -688,6 +723,6 @@ def handler(event, context):
 if __name__ == "__main__" and "get_ipython" in globals():
     # For running in Jupyter notebook as main
     import json
-    with open("../../../../event.json", "r") as f:
+    with open("../../../../event.yaml", "r") as f:
         data = EasyDict(yaml.safe_load(f))
     handler(data, None)

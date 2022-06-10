@@ -23,6 +23,7 @@ TERMINATE_SCRIPT=ec2terminate.sh
 
 TAG_SPECS="ResourceType=instance,Tags=[{Key=client,Value=${CLIENT_VALUE}}]"\ "ResourceType=volume,Tags=[{Key=client,Value=${CLIENT_VALUE}}]"
 
+./linkfiles.sh
 ./copyfiles.sh $QPCR_VERSION
 
 # Copy all source to S3 so the EC2 instance can download it

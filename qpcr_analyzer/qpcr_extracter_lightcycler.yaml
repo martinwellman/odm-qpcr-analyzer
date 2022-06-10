@@ -1,0 +1,53 @@
+qpcr_format_name: "LightCycler"
+
+# Columns defining this QPCR format. If a table has all of these columns then the table is for
+# this config file's format.
+match_columns_in_raw:
+    - "Pos"
+    - "Name"
+    - "Type"
+    - "CP"
+    - "Standard"
+
+# Delete these columns from the raw table
+delete_columns_from_raw:
+    - "Inc"
+
+# Extract these columns from the raw table and rename them
+extract_columns:
+    -   origin: "Pos"
+        target: "wellID"
+    -   origin: "Type"
+        target: "measureType"
+    -   origin: "Name"
+        target: "sampleID"
+    -   origin: "CP"
+        target: "ct"
+    -   origin: "Standard"
+        target: "sq"
+
+# Apply these regex operations to each extracted column
+# Keys are:
+#   columns: list[str]|str - The column(s) to apply the regex to
+#   target: list[str]|str|None - The result of the regex are assigned
+#       to these columns. If empty then columns are changed in place.
+#   match: The regex to match
+#   replace: The replacement for the regex. Tags are specified by \\n.
+mappers:
+    -   columns: "measureType"
+        match: "Standard"
+        replace: "std"
+    -   columns: "measureType"
+        match: "Unknown"
+        replace: "unkn"
+    -   columns: "measureType"
+        match: "Negative Control"
+        replace: "ntc"
+    -   columns: "sampleID"
+        target: "target"
+        match: "([^\\-*]*)-(.*)"
+        replace: "\\1"
+    -   columns: "sampleID"
+        target: "sampleID"
+        match: "([^\\-*]*)-(.*)"
+        replace: "\\2"

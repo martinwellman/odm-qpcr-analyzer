@@ -10,6 +10,8 @@ qpcr_analyzer/odmdata/
 qpcr_analyzer/temp/
 qpcr_analyzer/test/
 
+commitlog.txt
+
 # Files that start with ~ (temp files made by Excel, Word, some Lambda Container scripts, etc)
 *\~*
 
@@ -31,50 +33,56 @@ qpcr_analyzer_website/qpcr_html/includes/settings_values.php
 qpcr_analyzer_website/qpcr_html/includes/recaptcha_values.php
 
 # Website
-# qpcr_analyzer_website/
-qpcr_analyzer_website/qpcr_data/*
-!qpcr_analyzer_website/qpcr_data/README.md
-qpcr_analyzer_website/composer.phar
-qpcr_analyzer_website/qpcr_html/Formstone/
-qpcr_analyzer_website/qpcr_html/multiple-emails.js/
-qpcr_analyzer_website/qpcr_html/vendor/
+qpcr_analyzer_website/
+# qpcr_analyzer_website/qpcr_data/*
+# !qpcr_analyzer_website/qpcr_data/README.md
+# qpcr_analyzer_website/composer.phar
+# qpcr_analyzer_website/qpcr_html/Formstone/
+# qpcr_analyzer_website/qpcr_html/multiple-emails.js/
+# qpcr_analyzer_website/qpcr_html/vendor/
 
 # All links in the Lambda container
+# To get a list of all links to paste here, run:
+#   find lambda_container -type l -ls | awk -F' ' '{ print $11 }' | sort -n
+# in the odm-qpcr-analyzer directory
+lambda_container/source/app/cloud_utils.py
+lambda_container/source/app/credentials.json
+lambda_container/source/app/custom_functions.py
+lambda_container/source/app/emailer.py
+lambda_container/source/app/excel_calculator.py
+lambda_container/source/app/excel_file_utils.py
+lambda_container/source/app/gdrive_utils.py
+lambda_container/source/app/qaqc_b117.yaml
+lambda_container/source/app/qaqc_long-2main-inh.yaml
+lambda_container/source/app/qaqc_wide_diff-2main-inh.yaml
+lambda_container/source/app/qpcr_extracter.py
+lambda_container/source/app/qpcr_extracter.yaml
+lambda_container/source/app/qpcr_extracter_ariamx.yaml
+lambda_container/source/app/qpcr_extracter_biorad.yaml
+lambda_container/source/app/qpcr_extracter_lightcycler.yaml
+lambda_container/source/app/qpcr_extracter_qiaquant.yaml
+lambda_container/source/app/qpcr_methods.py
+lambda_container/source/app/qpcr_methods.xlsx
+lambda_container/source/app/qpcr_methods.yaml
+lambda_container/source/app/qpcr_populator.py
+lambda_container/source/app/qpcr_populator_b117_diff.yaml
+lambda_container/source/app/qpcr_populator_long-2main-inh.yaml
+lambda_container/source/app/qpcr_populator_wide_diff-2main-inh.yaml
+lambda_container/source/app/qpcr_qaqc.py
+lambda_container/source/app/qpcr_sampleids.py
+lambda_container/source/app/qpcr_sampleids.yaml
+lambda_container/source/app/qpcr_sampleslog.py
+lambda_container/source/app/qpcr_sampleslog.yaml
+lambda_container/source/app/qpcr_sites.py
+lambda_container/source/app/qpcr_sites.xlsx
+lambda_container/source/app/qpcr_sites.yaml
+lambda_container/source/app/qpcr_template_b117.xlsx
+lambda_container/source/app/qpcr_template_long-2main-inh.xlsx
+lambda_container/source/app/qpcr_template_wide-2main-inh.xlsx
+lambda_container/source/app/qpcr_updater.py
 lambda_container/source/app/qpcr_updater.yaml
 lambda_container/source/app/qpcr_updater_b117.yaml
-lambda_container/source/app/qpcr_populator_ottawa_wide_diff.yaml
-lambda_container/source/app/qpcr_populator_ottawa.yaml
-lambda_container/source/app/sites.xlsx
-lambda_container/source/app/cloud_utils.py
-lambda_container/source/app/qpcr_sites.py
-lambda_container/source/app/qpcr_updater.py
-lambda_container/source/app/qpcr_populator_ottawa_b117_diff.yaml
-lambda_container/source/app/gdrive_utils.py
-lambda_container/source/app/qpcr_template_ottawa.xlsx
-lambda_container/source/app/qpcr_template_ottawa_wide.xlsx
-lambda_container/source/app/qpcr_extracter_ottawa.yaml
 lambda_container/source/app/qpcr_utils.py
-lambda_container/source/app/qpcr_template_ottawa_b117.xlsx
-lambda_container/source/app/biorad_map.csv
-lambda_container/source/app/custom_functions.py
-lambda_container/source/app/sites.yaml
-lambda_container/source/app/qpcr_populator.py
-lambda_container/source/app/qpcr_qaqc.py
-lambda_container/source/app/emailer.py
-lambda_container/source/app/credentials.json
-lambda_container/source/app/biorad_mapper.yaml
-lambda_container/source/app/qaqc_ottawa_wide_diff.yaml
-lambda_container/source/app/excel_calculator.py
-lambda_container/source/app/qaqc_ottawa_b117.yaml
-lambda_container/source/app/fix_xlsx.py
-# lambda_container/source/app/wbe_odm/odm_mappers/biorad_mapper.py
-# lambda_container/source/app/wbe_odm/odm_mappers/base_mapper.py
-# lambda_container/source/app/wbe_odm/odm_mappers/excel_template_mapper.py
-# lambda_container/source/app/wbe_odm/odm_mappers/csv_mapper.py
-# lambda_container/source/app/wbe_odm/utilities.py
-lambda_container/source/app/wbe_odm
-lambda_container/source/app/qpcr_extracter.py
-lambda_container/source/app/qaqc_ottawa.yaml
 
 ####################################################################################
 # Auto-generated for Python

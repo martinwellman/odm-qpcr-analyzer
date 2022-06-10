@@ -1,0 +1,33 @@
+# Apply these regex operations to each extracted column
+# Keys are:
+#   columns: list[str]|str - The column(s) to apply the regex to
+#   target_columns: list[str]|str|None - The result of the regex are assigned
+#       to these columns. If empty then columns are changed in place.
+#   match: The regex to match
+#   replace: The replacement for the regex. Tags are specified by \\n.
+mappers:
+    -   columns: "target"
+        match: "1:([0-9]*)"   # eg 1:10, 1:40 for 10 or 40 dilutions of Pepper. Replace with "10" or "40".
+        replace: "\\1"
+        ignore_case: True
+    -   columns: "target"
+        match: "^(pepper|pmmov|npmmov|pep)[\\s_/\\:]*([0-9]*)$"
+        replace: "PMMoV:\\2"
+        ignore_case: True
+    -   columns: "target"
+        match: "^(n1|covn1)[\\s_/\\:]*([0-9]*)$"
+        replace: "covN1:\\2"
+        ignore_case: True
+    -   columns: "target"
+        match: "^(n2|covn2)[\\s_/\\:]*([0-9]*)$"
+        replace: "covN2:\\2"
+        ignore_case: True
+    # Remove trailing ':' (ie. targets that have no dilution specified)
+    -   columns: "target"
+        match: "\\:$"
+        replace: ""
+        ignore_case: True
+    # Remove disallowed characters
+    -   columns: "target"
+        match: "[^A-Za-z0-9\\:]"
+        replace: "_"

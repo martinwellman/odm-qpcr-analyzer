@@ -9,6 +9,7 @@ opencv-python-headless
 easydict
 pyyaml
 pandas
+xlrd
 requests
 argparse
 geojson-rewind

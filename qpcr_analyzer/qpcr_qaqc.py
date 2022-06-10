@@ -21,7 +21,7 @@ from openpyxl.styles import Font
 
 from qpcr_utils import (
     MAIN_SHEET, 
-    MAIN_COL_BL_CT, 
+    MAIN_COL_NORM_CT, 
     MAIN_COL_CT_AVG, 
     OUTLIER_COL,
     MAIN_ROW_DATA,
@@ -39,7 +39,7 @@ DESC_COL = "Description"
 PRIORITY_COL = "Priority"
 GROUP_COL = "Group"
 SAMPLE_ID_COL = "Sample ID"
-GENES_COL = "Genes"
+TARGETS_COL = "Targets"
 CELL_A_COL = "Cell A"
 CELL_B_COL = "Cell B"
 LOWER_LIMIT_COL = "Lower Limit"
@@ -54,7 +54,7 @@ DEFAULT_QAQC_DATA = {
     PRIORITY_COL : "",
     GROUP_COL : "",
     SAMPLE_ID_COL : "",
-    GENES_COL : "",
+    TARGETS_COL : "",
     CELL_A_COL : None,
     CELL_B_COL : None,
     LOWER_LIMIT_COL : None,
@@ -159,9 +159,9 @@ class QPCRQAQC(object):
         self.qaqc_run_standard_curve_inter_comparisons(self.current_name)
         self.qaqc_run_samples_within_standard_curves(self.current_name)
         self.qaqc_run_loq(self.current_name)
-        self.qaqc_run_baseline_in_range(self.current_name)
+        self.qaqc_run_normalizer_in_range(self.current_name)
         self.qaqc_run_inhibition(self.current_name)
-        self.qaqc_run_comparable_genes(self.current_name)
+        self.qaqc_run_comparable_targets(self.current_name)
         self.qaqc_run_copies_outliers(self.current_name)
         self.qaqc_run_non_detects(self.current_name)
 
@@ -245,7 +245,7 @@ class QPCRQAQC(object):
         formula = f"IF({QAQC_DEFAULT_ISERROR}, {errors_result}, {formula})"
         return "={}".format(parse_colrow_tags(formula, self.qaqc_df, row_num))
 
-    def qaqc_run_per_sample(self, name, match_genes, sheet_name, match_col_name, match_row_name, rng, populate_data_func, accept_blanks=False, fail_if_errors=True, mode="flatten"):
+    def qaqc_run_per_sample(self, name, match_targets, sheet_name, match_col_name, match_row_name, rng, populate_data_func, accept_blanks=False, fail_if_errors=True, mode="flatten"):
         """Go through the specified generated spreadsheet and call a callback (with data) for each row. The
         callback should fill in a QAQC dictionary object with all fields set (see DEFAULT_QAQC_DATA dictionary for 
         the different fields)
@@ -254,43 +254,70 @@ class QPCRQAQC(object):
         ----------
         name : str
             A descriptive name of the run. Typically used as the QAQC category name.
-        match_genes : str | list | tuple | np.ndarray
-            Find all rows that match these genes. The gene of the row is the main gene of the row. eg. If the row also contains
-            info for a normalization gene (eg. nPMMoV) then the normalization gene is not matched. If match_genes is empty then all
-            genes are matched.
+        match_targets : str | list | tuple | np.ndarray
+            Find all rows that match these targets. The target of the row is the main target of the row. eg. If the row also contains
+            info for a normalization target (eg. nPMMoV) then the normalization target is not matched. If match_targets is empty then all
+            targets are matched.
         sheet_name : str
             The sheet name to iterate over. eg. MAIN_SHEET.
-        match_col_name : str
-            When calling the callback, provide the Excel column Ids for all columns matching match_col_name. When multiple columns are
-            provided or matched then the behavior depends on the mode parameter eg. We might call the callback once with an
+        match_col_name : str | [str]
+            When calling the callback, provide the Excel column Ids for all columns with a name matching match_col_name. When multiple 
+            columns are provided or matched then the behavior depends on the mode parameter eg. We might call the callback once with an
             array of all matched columns, or multiple times with one matched column at a time. Each time the callback is
             called a new QAQC data row might be added.
+        match_row_name : str | [str]
+            ...
+        rng : [int, int]
+            The (optional) lower and (optional) upper values that specify if our value will validate or not. Each item in the
+            array can be None to specify no lower or no upper value.
+        populate_data_func : func
+            The callback function to call for each match. It should populate all required values for QA/QC in the dictionary it receives.
+        accept_blanks : bool
+            If True, then blank values will be treated as always validating to True. If False then blank values will always
+            validate to False.
+        fail_if_errors : bool
+            If True then the validation fails if the lower limit, upper limit, or value are errors in the
+            QAQC spreadhsheet. If False then the validation succeeds.
+        mode : str
+            "flatten" : Call the callback once per item in the flattened array of matches.
+            "one_per_match" : Call the callback with an array of matches, where the array has a column ID for each column in
+                match_col_name (ie. len(matched_columns) == len(match_col_name)).
+            "all_at_once" : Flatten all the matches, then call the callback once with all matches
+            "separate_groups" : Call the callback once for each item in match_col_name. The callback will receive all
+                columns matching match_col_name[0], then all columns matching match_col_name[1], etc.
         @TODO: FINISH COMMENTS
         """
         if isinstance(match_col_name, str):
             match_col_name = [match_col_name]
         if isinstance(match_row_name, str):
             match_row_name = [match_row_name]
-        if isinstance(match_genes, str):
-            match_genes = [match_genes]
+        if isinstance(match_targets, str):
+            match_targets = [match_targets]
         
         ws, info = self.populator.get_worksheet_and_info(sheet_name)
-        if match_genes is not None:
-            match_genes = [g.strip().lower() for g in match_genes]
+        if match_targets is not None:
+            match_targets = [g.strip().lower() for g in match_targets]
 
         qaqc_data = DEFAULT_QAQC_DATA.copy()
 
         # _, info = self.populator.get_worksheet_and_info(sheet_name)
+        # 
+        # Add the sheet names to the columns and rows to match, since that is how we store the column/row names internally
         target_column = [add_sheet_name_to_colrow_name(sheet_name, m) for m in match_col_name]
         target_row = [add_sheet_name_to_colrow_name(sheet_name, m) for m in match_row_name]
         origin = info["origin"]
+        # Go through all the rows in the sheet: We use both the row data (if we need it later on) and the row names
         for num, (row_data, row_names) in enumerate(zip(info["row_data"], info["row_names"])):
+            # cur_row is the Excel spreadsheet's row number
             cur_row = num + origin[0]
+            # If any of the names in target_row match any of the names assigned to the current row (row_names) the
+            # we have a match (we'll check for column matches later)
             if len(set(target_row).intersection(set(row_names))) > 0 and len(row_data) > 0:
+                # We'll use the first data element assigned to this row for matching based on the target
                 data = row_data[0]
-                row_gene = data[self.config.input.gene_type_col].iloc[0]
+                row_target = data[self.config.input.target_col].iloc[0]
                 row_sample_id = data[self.config.input.sample_id_col].iloc[0]
-                if match_genes is None or len(match_genes) == 0 or (row_gene is not None and row_gene.lower() in match_genes):
+                if match_targets is None or len(match_targets) == 0 or (row_target is not None and row_target.lower() in match_targets):
                     cols = self.populator.get_named_columns(sheet_name, target_column)
                     if mode == "flatten":
                         # Flatten, then call callback once per item in the flattened array
@@ -316,13 +343,13 @@ class QPCRQAQC(object):
                             cell_ref = f"'{ws.title}'!{cur_col}{cur_row}"
                             cell_refs = [cell_ref]
                         qaqc_data[GROUP_COL] = name
-                        # qaqc_data[DESC_COL] = f"{row_gene} LOQ (per well)"
+                        # qaqc_data[DESC_COL] = f"{row_target} LOQ (per well)"
                         qaqc_data[LOWER_LIMIT_COL] = rng[0] if rng is not None else None
                         qaqc_data[UPPER_LIMIT_COL] = rng[1] if rng is not None else None
                         # qaqc_data[VALUE_COL] = f"=IF(ISNUMBER({cell_ref}), {cell_ref}, \"\")" if cell_ref is not None else None
                         qaqc_data[VALUE_COL] = QAQC_VALUE_FORMULA.format(cell_ref=cell_ref)
                         qaqc_data[SAMPLE_ID_COL] = row_sample_id
-                        qaqc_data[GENES_COL] = self.get_qaqc_gene_for_column(cur_col, sheet_name, row_gene) # row_gene
+                        qaqc_data[TARGETS_COL] = self.get_qaqc_target_for_column(cur_col, sheet_name, row_target) # row_target
                         qaqc_data[CELL_A_COL] = self.make_cell_link(cell_refs, 1)
                         qaqc_data[CELL_B_COL] = self.make_cell_link(cell_refs, 2)
                         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=accept_blanks, fail_if_errors=fail_if_errors)
@@ -337,65 +364,65 @@ class QPCRQAQC(object):
         match_row_name = add_sheet_name_to_colrow_name(MAIN_SHEET, MAIN_ROW_DATA)
 
         for ntc_info in self.qaqc_config.ntcs:
-            unit_other = ntc_info.unit_other
-            if isinstance(unit_other, str):
-                unit_other = [unit_other]
+            measure_type = ntc_info.measure_type
+            if isinstance(measure_type, str):
+                measure_type = [measure_type]
 
             plates = df[self.config.input.plate_id_col].unique()
             
-            ntc_samples = full_df[full_df[self.config.input.unit_other_col].isin(unit_other) & full_df[self.config.input.plate_id_col].isin(plates)]
-            genes = [g.strip() for g in ntc_info.genes]
-            if len(genes) == 0:
-                genes = ntc_samples[self.config.input.gene_type_col].unique()
+            ntc_samples = full_df[full_df[self.config.input.measure_type_col].isin(measure_type) & full_df[self.config.input.plate_id_col].isin(plates)]
+            targets = [g.strip() for g in ntc_info.targets]
+            if len(targets) == 0:
+                targets = ntc_samples[self.config.input.target_col].unique()
             ct_range = ntc_info.ct_range
 
-            # Do each gene separately
-            for gene in genes:
+            # Do each target separately
+            for target in targets:
                 # Go through all NTCs
                 for idx, ntc_sample in ntc_samples.iterrows():
-                    ntc_gene = (ntc_sample[self.config.input.gene_type_col] or "").strip()
+                    ntc_target = (ntc_sample[self.config.input.target_col] or "").strip()
                     plate_id = (ntc_sample[self.config.input.plate_id_col] or "").strip()
                     standard_curve_id = (ntc_sample[self.config.input.standard_curve_id_col] or "")#.strip()
-                    lower_ntc_gene = ntc_gene.lower()
+                    lower_ntc_target = ntc_target.lower()
                     ntc_sample_id = (ntc_sample[self.config.input.sample_id_col] or "").strip().lower()
                     all_cells = []
 
-                    # See if we should handle the current NTC gene
-                    if gene is not None and lower_ntc_gene == gene.lower():
-                        # if ntc_info.source_max != "cal_gene_ct" and lower_ntc_gene == self.config.input.baseline_id.strip().lower() and self.config.template.hide_baseline_gene_from_main:
-                        # We're hiding the baseline gene from the main output, so we need to calculate the minimum Ct from the df
-                        if ntc_info.source_max == "all_gene_ct":
-                            calc_df = full_df[(full_df[self.config.input.unit_col] == "Ct") & (full_df[self.config.input.gene_type_col].str.lower() == lower_ntc_gene) & (full_df[self.config.input.plate_id_col].str.lower() == plate_id.lower())]
-                            max_formula = max(calc_df[self.config.input.value_col].max(), calc_df[OUTLIER_COL].max())
-                            # calc_df = df[(df[self.config.input.unit_col] == "Ct") & (df[self.config.input.gene_type_col].str.lower() == lower_ntc_gene) & (df[self.config.input.qa_col].isin(["FALSE", False]))]
-                            # max_formula = calc_df[self.config.input.value_col].max()
-                        elif ntc_info.source_max == "cal_gene_ct":
+                    # See if we should handle the current NTC target
+                    if target is not None and lower_ntc_target == target.lower():
+                        # if ntc_info.source_max != "cal_target_ct" and lower_ntc_target == self.config.input.normalizer_id.strip().lower() and self.config.template.hide_normalizer_target_from_main:
+                        # We're hiding the normalizer target from the main output, so we need to calculate the minimum Ct from the df
+                        if ntc_info.source_max == "all_target_ct":
+                            calc_df = full_df[(full_df[self.config.input.measure_type_col] == self.config.input.measure_type_unknown) & (full_df[self.config.input.target_col].str.lower() == lower_ntc_target) & (full_df[self.config.input.plate_id_col].str.lower() == plate_id.lower())]
+                            max_formula = max(calc_df[self.config.input.ct_col].max(), calc_df[OUTLIER_COL].max())
+                            # calc_df = df[(df[self.config.input.unit_col] == "Ct") & (df[self.config.input.target_col].str.lower() == lower_ntc_target) & (df[self.config.input.qa_col].isin(["FALSE", False]))]
+                            # max_formula = calc_df[self.config.input.ct_col].max()
+                        elif ntc_info.source_max == "cal_target_ct":
                             # Get a literal value
-                            cal_sheet_name = CAL_SHEET_FMT.format(gene=gene, plateID=standard_curve_id)
+                            cal_sheet_name = CAL_SHEET_FMT.format(targetName=target, plateID=standard_curve_id)
                             max_formula = self.populator.get_calibration_value(cal_sheet_name, "max_ct")
 
 
                             #     # Get a cell reference value
-                            #     first_std, last_std = self.get_first_and_last_average_standard_cells(gene, plate_id)
+                            #     first_std, last_std = self.get_first_and_last_average_standard_cells(target, plate_id)
                             #     if first_std and last_std:
                             #         max_formula = f"MAX({first_std}:{last_std})"
                             #     else:
                             #         max_formula = None
                         else:
-                            raise ValueError(f"Unrecognized source_max for NTC config, must be \"all_gene_ct\" or \"cal_gene_ct\", found \"{ntc_info.source_max}\"")
+                            raise ValueError(f"Unrecognized source_max for NTC config, must be \"all_target_ct\" or \"cal_target_ct\", found \"{ntc_info.source_max}\"")
                         # else:
-                        #     if ntc_info.source_max == "all_gene_ct":
+                        #     if ntc_info.source_max == "all_target_ct":
                         #         _, ws_info = self.populator.get_worksheet_and_info(MAIN_SHEET)
 
-                        #         # Find all rows in the worksheet that has data and is a matching gene
+                        #         # Find all rows in the worksheet that has data and is a matching target
                         #         for row_num, (row_names, row_data) in enumerate(zip(ws_info["row_names"], ws_info["row_data"])):
                         #             if match_row_name in row_names:
-                        #                 cur_genes = [d[self.config.input.gene_type_col].iloc[0].strip().lower() for d in row_data]
-                        #                 if lower_ntc_gene in cur_genes:
+                        #                 cur_targets = [d[self.config.input.target_col].iloc[0].strip().lower() for d in row_data]
+                        #                 if lower_ntc_target in cur_targets:
                         #                     cur_row = row_num + ws_info["origin"][0]
-                        #                     if lower_ntc_gene == self.config.input.baseline_id.strip().lower():
+                        #                     if lower_ntc_target == self.config.input.normalizer_id.strip().lower():
                         #                         # use_columns = bl_sample_columns
-                        #                         values_range = self.populator.get_named_cells(MAIN_SHEET, None, MAIN_COL_BL_CT, override_row=cur_row, include_sheet_name=True, match_data={"plateID":plate_id})
+                        #                         values_range = self.populator.get_named_cells(MAIN_SHEET, None, MAIN_COL_NORM_CT, override_row=cur_row, include_sheet_name=True, match_data={"plateID":plate_id})
                         #                     else:
                         #                         values_range = self.populator.get_named_cells(MAIN_SHEET, None, MAIN_COL_CT, override_row=cur_row, include_sheet_name=True, match_data={"plateID":plate_id})
                                             
@@ -404,11 +431,11 @@ class QPCRQAQC(object):
                         #             max_formula = None
                         #         else:
                         #             max_formula = "MAX({})".format(",".join(all_cells))
-                        #     elif ntc_info.source_max == "cal_gene_ct":
-                        #         first_std, last_std = self.get_first_and_last_average_standard_cells(gene, plate_id)
+                        #     elif ntc_info.source_max == "cal_target_ct":
+                        #         first_std, last_std = self.get_first_and_last_average_standard_cells(target, plate_id)
                         #         max_formula = last_std
                         #     else:
-                        #         raise ValueError(f"Unrecognized source_max for NTC config, must be \"all_gene_ct\" or \"max_gene_cal_ct\", found \"{ntc_info.source_max}\"")
+                        #         raise ValueError(f"Unrecognized source_max for NTC config, must be \"all_target_ct\" or \"max_target_cal_ct\", found \"{ntc_info.source_max}\"")
 
                         lower = f"{max_formula}+{ntc_info.delta_from_max_ct}" if not pd.isna(max_formula) else None
                         if ntc_info.ct_range[0] is not None and lower is not None:
@@ -417,14 +444,14 @@ class QPCRQAQC(object):
 
                         qaqc_data = DEFAULT_QAQC_DATA.copy()
                         qaqc_data[GROUP_COL] = name
-                        qaqc_data[CATEGORY_COL] = ntc_info.category.format(gene=ntc_gene)
-                        qaqc_data[DESC_COL] = ntc_info.description.format(gene=ntc_gene)
+                        qaqc_data[CATEGORY_COL] = ntc_info.category.format(target=ntc_target)
+                        qaqc_data[DESC_COL] = ntc_info.description.format(target=ntc_target)
                         qaqc_data[PRIORITY_COL] = ntc_info.priority
                         qaqc_data[LOWER_LIMIT_COL] = f"={lower}" if lower is not None else None
                         qaqc_data[UPPER_LIMIT_COL] = f"={upper}" if upper is not None else None
-                        qaqc_data[VALUE_COL] = ntc_sample[self.config.input.value_col]
+                        qaqc_data[VALUE_COL] = ntc_sample[self.config.input.ct_col]
                         qaqc_data[SAMPLE_ID_COL] = ntc_sample_id
-                        qaqc_data[GENES_COL] = ntc_gene
+                        qaqc_data[TARGETS_COL] = ntc_target
                         qaqc_data[CELL_A_COL] = None #self.make_cell_link(all_cells, 1)
                         qaqc_data[CELL_B_COL] = None #self.make_cell_link(all_cells, 2)
                         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=True)
@@ -440,11 +467,11 @@ class QPCRQAQC(object):
 
         for no_detections_config in all_no_detections_config:
             individual_columns = no_detections_config.get("individual_columns", False)
-            self.qaqc_run_per_sample(name, no_detections_config.genes, MAIN_SHEET, no_detections_config.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_no_detections, no_detections_config), accept_blanks=False, mode="flatten" if individual_columns else "separate_groups")
+            self.qaqc_run_per_sample(name, no_detections_config.targets, MAIN_SHEET, no_detections_config.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_no_detections, no_detections_config), accept_blanks=False, mode="flatten" if individual_columns else "separate_groups")
 
     def populate_qaqc_no_detections(self, detections_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         individual_columns = detections_info.get("individual_columns", False)
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
         ws, _ = self.populator.get_worksheet_and_info(target_sheet_name)
 
         if isinstance(cur_col, str):
@@ -463,8 +490,8 @@ class QPCRQAQC(object):
 
         qaqc_data[CELL_A_COL] = self.make_cell_link(cell_refs, type=0)
         qaqc_data[CELL_B_COL] = None
-        qaqc_data[CATEGORY_COL] = detections_info.category.format(gene=gene)
-        qaqc_data[DESC_COL] = detections_info.description.format(gene=gene)
+        qaqc_data[CATEGORY_COL] = detections_info.category.format(target=target)
+        qaqc_data[DESC_COL] = detections_info.description.format(target=target)
         qaqc_data[PRIORITY_COL] = detections_info.priority
         # qaqc_data[LOWER_LIMIT_COL] = ", ".join([m if m else "<blank>" for m in matches])
         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=False, override_formula=formula)
@@ -478,10 +505,10 @@ class QPCRQAQC(object):
         if samples_info is None:
             return
 
-        self.qaqc_run_per_sample(name, samples_info.genes, MAIN_SHEET, samples_info.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_sample_data_available, samples_info), accept_blanks=False, mode="all_at_once")
+        self.qaqc_run_per_sample(name, samples_info.targets, MAIN_SHEET, samples_info.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_sample_data_available, samples_info), accept_blanks=False, mode="all_at_once")
 
     def populate_qaqc_sample_data_available(self, samples_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
         ws, _ = self.populator.get_worksheet_and_info(target_sheet_name)
 
         if isinstance(cur_col, (list, tuple, np.ndarray)):
@@ -494,8 +521,8 @@ class QPCRQAQC(object):
         formula = ['NOT({}={})'.format("{col='Value'}{row}", f"\"{m}\"" if isinstance(m, str) else m) for m in matches]
         formula = "AND({})".format(",".join(formula))
 
-        qaqc_data[CATEGORY_COL] = samples_info.category.format(gene=gene)
-        qaqc_data[DESC_COL] = samples_info.description.format(gene=gene)
+        qaqc_data[CATEGORY_COL] = samples_info.category.format(target=target)
+        qaqc_data[DESC_COL] = samples_info.description.format(target=target)
         qaqc_data[PRIORITY_COL] = samples_info.priority
         qaqc_data[LOWER_LIMIT_COL] = ", ".join([str(m) if m != "" else "<blank>" for m in matches])
         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=False, override_formula=formula)
@@ -532,7 +559,7 @@ class QPCRQAQC(object):
     
     def populate_qaqc_copies_outliers(self, copies_info, column_names, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         ws, info = self.populator.get_worksheet_and_info(target_sheet_name)
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
         sample_id = row_data[self.config.input.sample_id_col].iloc[0]
 
         points_range = self.populator.get_named_range(target_sheet_name, None, column_names, override_row=cur_row, include_sheet_name=True) #, fixed_rows=True, fixed_cols=True, include_sheet_name=False):
@@ -540,8 +567,8 @@ class QPCRQAQC(object):
         # points_range = ",".join(points_range)
         stdev = f"STDEV({points_range})"
         avg = f"AVERAGE({points_range})"
-        qaqc_data[CATEGORY_COL] = copies_info.category.format(gene=gene)
-        qaqc_data[DESC_COL] = copies_info.description.format(gene=gene)
+        qaqc_data[CATEGORY_COL] = copies_info.category.format(target=target)
+        qaqc_data[DESC_COL] = copies_info.description.format(target=target)
         qaqc_data[PRIORITY_COL] = copies_info.priority
         qaqc_data[LOWER_LIMIT_COL] = f"={avg}-{copies_info.num_stdev}*{stdev}"
         qaqc_data[UPPER_LIMIT_COL] = f"={avg}+{copies_info.num_stdev}*{stdev}"
@@ -550,40 +577,40 @@ class QPCRQAQC(object):
 
         return True
 
-    def qaqc_run_comparable_genes(self, name):
-        if "comparable_genes" not in self.qaqc_config:
-            print("WARNING: 'comparable_genes' does not exist in QAQC config file")
+    def qaqc_run_comparable_targets(self, name):
+        if "comparable_targets" not in self.qaqc_config:
+            print("WARNING: 'comparable_targets' does not exist in QAQC config file")
             return
 
-        for comp_info in self.qaqc_config.comparable_genes:
-            self.qaqc_run_per_sample(name, comp_info.genes[0], MAIN_SHEET, MAIN_COL_CT_AVG, MAIN_ROW_DATA, None, partial(self.populate_qaqc_comparable_genes, comp_info), accept_blanks=False)
+        for comp_info in self.qaqc_config.comparable_targets:
+            self.qaqc_run_per_sample(name, comp_info.targets[0], MAIN_SHEET, MAIN_COL_CT_AVG, MAIN_ROW_DATA, None, partial(self.populate_qaqc_comparable_targets, comp_info), accept_blanks=False)
 
-    def populate_qaqc_comparable_genes(self, comp_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
+    def populate_qaqc_comparable_targets(self, comp_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         _, info = self.populator.get_worksheet_and_info(target_sheet_name)
-        gene_a = row_data[self.config.input.gene_type_col].iloc[0]
-        gene_b = comp_info.genes[1].strip()
+        target_a = row_data[self.config.input.target_col].iloc[0]
+        target_b = comp_info.targets[1].strip()
         row_num_a = cur_row
         row_sample_id = row_data[self.config.input.sample_id_col].iloc[0]
-        # Find the matching row with the same sample_id but with the second gene
+        # Find the matching row with the same sample_id but with the second target
         match_row = add_sheet_name_to_colrow_name(target_sheet_name, MAIN_ROW_DATA)
         column_addr = self.populator.get_named_columns(target_sheet_name, add_sheet_name_to_colrow_name(target_sheet_name, MAIN_COL_CT_AVG), flatten_names=True)
         if len(column_addr) == 0:
-            print("WARNING: Could not find columns named '{}' in populate_qaqc_comparable_genes")
+            print("WARNING: Could not find columns named '{}' in populate_qaqc_comparable_targets")
             return False
         column_addr = column_addr[0]
         for row_num, (cur_names, cur_data) in enumerate(zip(info["row_names"], info["row_data"])):
             if match_row in cur_names:
                 for check_data in cur_data:
-                    cur_gene = check_data[self.config.input.gene_type_col].iloc[0].strip().lower()
+                    cur_target = check_data[self.config.input.target_col].iloc[0].strip().lower()
                     cur_sample_id = check_data[self.config.input.sample_id_col].iloc[0]
-                    if cur_sample_id == row_sample_id and cur_gene.lower() == gene_b.lower():
+                    if cur_sample_id == row_sample_id and cur_target.lower() == target_b.lower():
                         row_num_b = row_num + info["origin"][0]
 
                         cell_ref_a = f"'{target_sheet_name}'!{column_addr}{row_num_a}"
                         cell_ref_b = f"'{target_sheet_name}'!{column_addr}{row_num_b}"
 
-                        qaqc_data[CATEGORY_COL] = comp_info.category.format(gene_a=gene_a, gene_b=gene_b)
-                        qaqc_data[DESC_COL] = comp_info.description.format(gene_a=gene_a, gene_b=gene_b)
+                        qaqc_data[CATEGORY_COL] = comp_info.category.format(target_a=target_a, target_b=target_b)
+                        qaqc_data[DESC_COL] = comp_info.description.format(target_a=target_a, target_b=target_b)
                         qaqc_data[PRIORITY_COL] = comp_info.priority
                         qaqc_data[CELL_A_COL] = self.make_cell_link(cell_ref_a)
                         qaqc_data[CELL_B_COL] = self.make_cell_link(cell_ref_b)
@@ -635,7 +662,7 @@ class QPCRQAQC(object):
                     self.qaqc_run_value_match(name, non_detect, info[1]["sheet_name"])
 
     # def populate_qaqc_inhibition(self, inhibition_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-    #     gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
+    #     target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
     #     if inhibition_info.mode == "2col":
     #         cell_ref_a = f"'{target_sheet_name}'!{cur_col[0]}{cur_row}"
     #         cell_ref_b = f"'{target_sheet_name}'!{cur_col[1]}{cur_row}"
@@ -645,32 +672,32 @@ class QPCRQAQC(object):
     #         cell_ref_a = f"'{target_sheet_name}'!{cur_col}{cur_row}"
     #         qaqc_data[VALUE_COL] = QAQC_VALUE_FORMULA.format(cell_ref=cell_ref_a)
 
-    #     qaqc_data[CATEGORY_COL] = inhibition_info.category.format(gene=gene)
-    #     qaqc_data[DESC_COL] = inhibition_info.description.format(gene=gene)
+    #     qaqc_data[CATEGORY_COL] = inhibition_info.category.format(target=target)
+    #     qaqc_data[DESC_COL] = inhibition_info.description.format(target=target)
     #     qaqc_data[PRIORITY_COL] = inhibition_info.priority
     #     return True
 
     def qaqc_run_value_in_range(self, name, config, sheet_name):
         row_name = MAIN_ROW_DATA if sheet_name == MAIN_SHEET else CAL_ROW_DATA
-        self.qaqc_run_per_sample(name, config.get("genes", []), sheet_name, config.columns, row_name, config.range, partial(self.populate_qaqc_value_in_range, config), accept_blanks=config.get("accept_blanks", True), mode="flatten")
+        self.qaqc_run_per_sample(name, config.get("targets", []), sheet_name, config.columns, row_name, config.range, partial(self.populate_qaqc_value_in_range, config), accept_blanks=config.get("accept_blanks", True), mode="flatten")
 
     def populate_qaqc_value_in_range(self, range_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
-        qaqc_data[CATEGORY_COL] = range_config.category.format(gene=gene, range=rng)
-        qaqc_data[DESC_COL] = range_config.description.format(gene=gene, range=rng)
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
+        qaqc_data[CATEGORY_COL] = range_config.category.format(target=target, range=rng)
+        qaqc_data[DESC_COL] = range_config.description.format(target=target, range=rng)
         qaqc_data[PRIORITY_COL] = range_config.priority
         return True
 
     def qaqc_run_value_match(self, name, config, sheet_name):
         row_name = MAIN_ROW_DATA if sheet_name == MAIN_SHEET else CAL_ROW_DATA
-        self.qaqc_run_per_sample(name, config.get("genes", []), sheet_name, config.columns, row_name, None, partial(self.populate_qaqc_value_match, config), accept_blanks=True, mode="flatten")
+        self.qaqc_run_per_sample(name, config.get("targets", []), sheet_name, config.columns, row_name, None, partial(self.populate_qaqc_value_match, config), accept_blanks=True, mode="flatten")
 
     def populate_qaqc_value_match(self, match_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         bad_matches = match_config.get("bad_matches", None)
         good_matches = match_config.get("good_matches", None)
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
-        qaqc_data[CATEGORY_COL] = match_config.category.format(gene=gene)
-        qaqc_data[DESC_COL] = match_config.description.format(gene=gene)
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
+        qaqc_data[CATEGORY_COL] = match_config.category.format(target=target)
+        qaqc_data[DESC_COL] = match_config.description.format(target=target)
         qaqc_data[PRIORITY_COL] = match_config.priority
 
         value_cell = parse_colrow_tags("{col='Value'}{row}", self.qaqc_df, self.get_next_qaqc_row())
@@ -714,12 +741,12 @@ class QPCRQAQC(object):
             return
 
         for loq_config in self.qaqc_config.loq:
-            self.qaqc_run_per_sample(name, loq_config.genes, MAIN_SHEET, loq_config.columns, MAIN_ROW_DATA, loq_config.copies_per_well_range, partial(self.populate_qaqc_loq, loq_config), accept_blanks=True)
+            self.qaqc_run_per_sample(name, loq_config.targets, MAIN_SHEET, loq_config.columns, MAIN_ROW_DATA, loq_config.copies_per_well_range, partial(self.populate_qaqc_loq, loq_config), accept_blanks=True)
 
     def populate_qaqc_loq(self, loq_config, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-        gene = self.get_qaqc_gene_for_column(cur_col, target_sheet_name, row_data[self.config.input.gene_type_col].iloc[0])
-        qaqc_data[CATEGORY_COL] = loq_config.category.format(gene=gene)
-        qaqc_data[DESC_COL] = loq_config.description.format(gene=gene)
+        target = self.get_qaqc_target_for_column(cur_col, target_sheet_name, row_data[self.config.input.target_col].iloc[0])
+        qaqc_data[CATEGORY_COL] = loq_config.category.format(target=target)
+        qaqc_data[DESC_COL] = loq_config.description.format(target=target)
         qaqc_data[PRIORITY_COL] = loq_config.priority
         return True
 
@@ -757,7 +784,7 @@ class QPCRQAQC(object):
         qaqc_data[CELL_A_COL] = self.make_cell_link(all_cells, 0)
         qaqc_data[CELL_B_COL] = None
         qaqc_data[VALUE_COL] = f"=IF(COUNT({all_cells_str})>1, {stdev_formula}, 0)"
-        qaqc_data[GENES_COL] = None
+        qaqc_data[TARGETS_COL] = None
         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=True)
         return True
 
@@ -772,44 +799,45 @@ class QPCRQAQC(object):
         qaqc_data[CELL_A_COL] = self.make_cell_link(all_cells, 0)
         qaqc_data[CELL_B_COL] = None
         # qaqc_data[VALUE_COL] = f"=IF(COUNT({all_cells_str})>1, {stdev_formula}, 0)"
-        qaqc_data[GENES_COL] = None
+        qaqc_data[TARGETS_COL] = None
         qaqc_data[VALIDATES_COL] = self.get_validates_formula(accept_blanks=True)
         return True
 
-    def qaqc_run_baseline_in_range(self, name):
-        if "baseline_ct_range" not in self.qaqc_config:
-            print("WARNING: 'baseline_ct_range' does not exist in QAQC config file")
+    def qaqc_run_normalizer_in_range(self, name):
+        if "normalizer_ct_range" not in self.qaqc_config:
+            print("WARNING: 'normalizer_ct_range' does not exist in QAQC config file")
             return
 
-        # rng = self.qaqc_config.baseline_ct_range.ranges.get(self.qaqc_config.site, None)
+        # rng = self.qaqc_config.normalizer_ct_range.ranges.get(self.qaqc_config.site, None)
         # if rng is None:
-        #     print(f"WARNING: No baseline_ct_range in QAQC config for site '{self.qaqc_config.site}'")
+        #     print(f"WARNING: No normalizer_ct_range in QAQC config for site '{self.qaqc_config.site}'")
         #     return
 
-        self.qaqc_run_per_sample(name, [], MAIN_SHEET, MAIN_COL_BL_CT, MAIN_ROW_DATA, None, partial(self.populate_qaqc_data_baseline_in_range, self.qaqc_config.baseline_ct_range), accept_blanks=True)
+        self.qaqc_run_per_sample(name, [], MAIN_SHEET, MAIN_COL_NORM_CT, MAIN_ROW_DATA, None, partial(self.populate_qaqc_data_normalizer_in_range, self.qaqc_config.normalizer_ct_range), accept_blanks=True)
 
-    def populate_qaqc_data_baseline_in_range(self, baseline_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
-        # row_gene = row_data[self.config.input.gene_type_col].iloc[0]
-        site_id = row_data[f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"].iloc[0] or "<default>"
-        site_id = site_id.replace(f"{self.populator.config.input.lab_id}{self.populator.config.input.lab_id_separator}", "")
-        if site_id not in baseline_info.ranges.keys():
+    def populate_qaqc_data_normalizer_in_range(self, normalizer_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
+        # row_target = row_data[self.config.input.target_col].iloc[0]
+        # site_id = row_data[f"{self.config.input.sample_sheet_name}_{self.config.input.site_id_col}"].iloc[0] or "<default>"
+        site_id = row_data[self.config.input.site_id_col].iloc[0] or "<default>"
+        # site_id = site_id.replace(f"{self.populator.config.input.lab_id}{self.populator.config.input.lab_id_separator}", "")
+        if site_id not in normalizer_info.ranges.keys():
             # @TODO: Readd this informational output
-            # print(f"Unrecognized site for QA/QC baseline_ct_range: {site_id}")
+            # print(f"Unrecognized site for QA/QC normalizer_ct_range: {site_id}")
             return False
 
-        rng = baseline_info.ranges[site_id]
+        rng = normalizer_info.ranges[site_id]
         qaqc_data[LOWER_LIMIT_COL] = rng[0]
         qaqc_data[UPPER_LIMIT_COL] = rng[1]
 
-        gene = baseline_info.gene
-        qaqc_data[CATEGORY_COL] = baseline_info.category.format(gene=gene, site=site_id)
-        qaqc_data[DESC_COL] = baseline_info.description.format(gene=gene, site=site_id)
-        qaqc_data[PRIORITY_COL] = baseline_info.priority
-        qaqc_data[GENES_COL] = gene
+        target = normalizer_info.target
+        qaqc_data[CATEGORY_COL] = normalizer_info.category.format(target=target, site=site_id)
+        qaqc_data[DESC_COL] = normalizer_info.description.format(target=target, site=site_id)
+        qaqc_data[PRIORITY_COL] = normalizer_info.priority
+        qaqc_data[TARGETS_COL] = target
         return True
 
     def get_first_and_last_average_standard_cells(self, standard_curve_id):
-        cal_sheet_name = standard_curve_id #CAL_SHEET_FMT.format(gene=gene, plateID=plate_id)
+        cal_sheet_name = standard_curve_id #CAL_SHEET_FMT.format(targetName=target, plateID=plate_id)
         cell_id_format = "avg_std_{}"
         num = 0
         first_std = None
@@ -838,26 +866,26 @@ class QPCRQAQC(object):
             return
 
         for cal_info in self.qaqc_config.standard_curves.samples_within_calibration_curve:
-            cur_genes = cal_info.genes
-            if cur_genes is not None:
-                cur_genes = [g.strip() for g in cal_info.genes]
-            self.qaqc_run_per_sample(name, cur_genes, MAIN_SHEET, cal_info.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_samples_within_standard_curves, cal_info), mode="all_at_once")
+            cur_targets = cal_info.targets
+            if cur_targets is not None:
+                cur_targets = [g.strip() for g in cal_info.targets]
+            self.qaqc_run_per_sample(name, cur_targets, MAIN_SHEET, cal_info.columns, MAIN_ROW_DATA, None, partial(self.populate_qaqc_samples_within_standard_curves, cal_info), mode="all_at_once")
             
     def populate_qaqc_samples_within_standard_curves(self, cal_info, target_sheet_name, qaqc_data, row_data, name, rng, cur_row, cur_col):
         accept_blanks = False
         ws, info = self.populator.get_worksheet_and_info(target_sheet_name)
-        main_gene = row_data[self.config.input.gene_type_col].iloc[0]
+        main_target = row_data[self.config.input.target_col].iloc[0]
         sample_id = row_data[self.config.input.sample_id_col].iloc[0]
-        bl_cols = cal_info.get("baseline_columns", None)
+        bl_cols = cal_info.get("normalizer_columns", None)
         if bl_cols is not None:
-            bl_cols = [add_sheet_name_to_colrow_name(target_sheet_name, c) for c in cal_info.baseline_columns]
+            bl_cols = [add_sheet_name_to_colrow_name(target_sheet_name, c) for c in cal_info.normalizer_columns]
             bl_cols = self.populator.get_named_columns(target_sheet_name, bl_cols, flatten_names=True)
-        # Do both the main columns (cur_col) and the baseline columns (bl_cols)
-        for check_cols, _gene in zip([cur_col, bl_cols], [main_gene, cal_info.baseline_gene]):
+        # Do both the main columns (cur_col) and the normalizer columns (bl_cols)
+        for check_cols, _target in zip([cur_col, bl_cols], [main_target, cal_info.normalizer_target]):
             if check_cols is None:
                 continue
             for col in check_cols:
-                gene = self.get_qaqc_gene_for_column(col, target_sheet_name, _gene)
+                target = self.get_qaqc_target_for_column(col, target_sheet_name, _target)
 
                 cell_ref = f"{col}{cur_row}"
                 plate_id = self.populator.get_cell_standard_curve_id(ws[cell_ref])
@@ -869,13 +897,13 @@ class QPCRQAQC(object):
 
                 if first_std is None:
                     continue
-                
+
                 cell_ref = f"'{ws.title}'!{cell_ref}"
-                qaqc_data[CATEGORY_COL] = cal_info.category.format(gene=gene)
-                qaqc_data[DESC_COL] = cal_info.description.format(gene=gene)
+                qaqc_data[CATEGORY_COL] = cal_info.category.format(target=target)
+                qaqc_data[DESC_COL] = cal_info.description.format(target=target)
                 qaqc_data[PRIORITY_COL] = cal_info.priority
                 qaqc_data[GROUP_COL] = name
-                qaqc_data[GENES_COL] = gene
+                qaqc_data[TARGETS_COL] = target
                 qaqc_data[LOWER_LIMIT_COL] = f"={first_std}" if isinstance(first_std, str) else first_std
                 qaqc_data[UPPER_LIMIT_COL] = f"={last_std}" if isinstance(last_std, str) else last_std
                 # qaqc_data[VALUE_COL] = f"=IF(ISNUMBER({cell_ref}), {cell_ref}, \"\")"
@@ -887,27 +915,36 @@ class QPCRQAQC(object):
         
         return False
 
-    def get_qaqc_gene_for_column(self, col_ids, sheet_name, default_gene):
-        column_genes = self.qaqc_config.get("column_genes", None)
-        if not column_genes or len(column_genes.keys()) == 0:
-            return default_gene
+    def get_qaqc_target_for_column(self, col_ids, sheet_name, default_target):
+        """Get the target name associated with a column in the sheet. The targets are specified
+        in the qaqc.yaml config file in the column_targets dictionary. The dictionary has
+        keys specifying a key name, and values are an array of column names for that target.
+        
+        If column_targets is not in the config file then we return default_target.
+        
+        Parameters:
+            col_ids: 
+        """
+        column_targets = self.qaqc_config.get("column_targets", None)
+        if not column_targets or len(column_targets.keys()) == 0:
+            return default_target
 
         if isinstance(col_ids, str):
             col_id = col_ids
         else:
             if len(col_ids) == 0:
-                return default_gene
+                return default_target
             col_id = col_ids[0]
             while isinstance(col_id, (list, tuple, np.ndarray)):
                 col_id = col_id[0]
         
         column_names = self.populator.get_column_names(sheet_name, col_id)
         column_names = [c[len(sheet_name)+1:] for c in column_names]
-        matches = [gene for gene, cs in column_genes.items() if len(set(column_names).intersection(set(cs))) > 0]
+        matches = [target for target, cs in column_targets.items() if len(set(column_names).intersection(set(cs))) > 0]
         if len(matches) == 0:
-            return default_gene
+            return default_target
         elif len(matches) > 1:
-            raise ValueError(f"Multiple gene matches for column '{col_id}' in qaqc_config.column_genes: {matches}")
+            raise ValueError(f"Multiple target matches for column '{col_id}' in qaqc_config.column_targets: {matches}")
         
         # print(f"Matched {col_ids} with {matches[0]}")
         return matches[0]
@@ -923,12 +960,12 @@ class QPCRQAQC(object):
         for comp in self.qaqc_config.standard_curves.inter_comparisons:
             qaqc_data = DEFAULT_QAQC_DATA.copy()
             
-            gene_a, gene_b = comp.genes
+            target_a, target_b = comp.targets
 
-            pairs = self.populator.get_all_paired_cal_sheets(gene_a, gene_b)
+            pairs = self.populator.get_all_paired_cal_sheets(target_a, target_b)
 
-            # sheet_name_a = CAL_SHEET_FMT.format(gene_a)
-            # sheet_name_b = CAL_SHEET_FMT.format(gene_b)
+            # sheet_name_a = CAL_SHEET_FMT.format(target_a)
+            # sheet_name_b = CAL_SHEET_FMT.format(target_b)
             # _, info_a = self.populator.get_worksheet_and_info(sheet_name_a)
             # _, info_b = self.populator.get_worksheet_and_info(sheet_name_b)
 
@@ -938,11 +975,11 @@ class QPCRQAQC(object):
             for info_a, info_b in pairs:
                 sheet_name_a = info_a["sheet_name"]
                 sheet_name_b = info_b["sheet_name"]
-                qaqc_data[GENES_COL] = ",".join(comp.genes)
+                qaqc_data[TARGETS_COL] = ",".join(comp.targets)
                 for num, abs_diff_max in enumerate(comp.abs_diff_max):
                     format_vars = {
-                        "gene_a" : gene_a,
-                        "gene_b" : gene_b,
+                        "target_a" : target_a,
+                        "target_b" : target_b,
                         "std_num" : num+1,
                     }
                     qaqc_data[CATEGORY_COL] = comp.category.format(**format_vars)
@@ -982,15 +1019,15 @@ class QPCRQAQC(object):
         for curve in self.qaqc_config.standard_curves.curves:
             qaqc_data = DEFAULT_QAQC_DATA.copy()
             qaqc_data[GROUP_COL] = name
-            for gene in curve.genes:
-                sheets = self.populator.get_cal_sheets_by_gene(gene, no_qaqc_only=True)
+            for target in curve.targets:
+                sheets = self.populator.get_cal_sheets_by_target(target, no_qaqc_only=True)
                 for info in sheets:
-                    # sheet_name = CAL_SHEET_FMT.format(gene)
+                    # sheet_name = CAL_SHEET_FMT.format(target)
                     sheet_name = info["sheet_name"]
                     # _, info = self.populator.get_worksheet_and_info(sheet_name)
                     if info is None:
                         continue
-                    qaqc_data[GENES_COL] = gene
+                    qaqc_data[TARGETS_COL] = target
 
                     # Add rsq, slope, and intercept
                     params = []
@@ -1001,8 +1038,8 @@ class QPCRQAQC(object):
                     if "intercept_range" in curve:
                         params += [(curve.intercept_description, curve.intercept_priority, "intercept", curve.intercept_range)]
                     for desc, priority, id, rng in params:
-                        qaqc_data[CATEGORY_COL] = curve.category.format(gene=gene)
-                        qaqc_data[DESC_COL] = desc.format(gene=gene)
+                        qaqc_data[CATEGORY_COL] = curve.category.format(target=target)
+                        qaqc_data[DESC_COL] = desc.format(target=target)
                         qaqc_data[PRIORITY_COL] = priority
                         qaqc_data[LOWER_LIMIT_COL] = rng[0] if rng is not None else None
                         qaqc_data[UPPER_LIMIT_COL] = rng[1] if rng is not None else None
@@ -1026,8 +1063,8 @@ class QPCRQAQC(object):
                     # Check if each standard replicates average is in range
                     if "average_replicates_range" in curve:
                         for num, rng in enumerate(curve.average_replicates_range):
-                            qaqc_data[CATEGORY_COL] = curve.category.format(gene=gene)
-                            qaqc_data[DESC_COL] = curve.replicates_description.format(gene=gene, std_num=num+1)
+                            qaqc_data[CATEGORY_COL] = curve.category.format(target=target)
+                            qaqc_data[DESC_COL] = curve.replicates_description.format(target=target, std_num=num+1)
                             qaqc_data[PRIORITY_COL] = curve.replicates_priority
                             qaqc_data[LOWER_LIMIT_COL] = rng[0] if rng is not None else None
                             qaqc_data[UPPER_LIMIT_COL] = rng[1] if rng is not None else None
@@ -1162,7 +1199,7 @@ class QPCRQAQC(object):
                                 else:
                                     target_range = f"{first_col}{current_row}:{last_col}{current_row}"
                                 r = Rule(type="expression", dxf=self.styles[no_detections_config.priority]["dxf"], stopIfTrue=False)
-                                formula = [f'${col}${current_row}<>""' for col in cur_col]
+                                formula = [f'ISNUMBER(${col}${current_row})' for col in cur_col]
                                 formula = [f'IF({f}, 1, 0)' for f in formula]
                                 formula = "+".join(formula)
                                 formula = f'{formula}<{no_detections_config.min_detections}'
@@ -1329,7 +1366,7 @@ class QPCRQAQC(object):
 
     def remove_all_outliers(self, data, master_df):
         """Remove all outlier Ct values in the data by setting them to None. Data are matched together
-        based on gene and sample ID.
+        based on target and sample ID.
         """            
         # data[OUTLIER_COL] = None
 
@@ -1339,32 +1376,30 @@ class QPCRQAQC(object):
         main_outliers_info = self.qaqc_config.get("main_ct_outliers", None)
         cal_outliers_info = self.qaqc_config.get("cal_ct_outliers", None)
 
-        for all_outliers_info, unit_tag, use_unit_col in [(main_outliers_info, "Ct", True), (cal_outliers_info, "Ct_Std", False)]:
+        # for all_outliers_info, unit_tag, use_unit_col in [(main_outliers_info, "Ct", True), (cal_outliers_info, "Ct_Std", False)]:
+        for all_outliers_info, measure_type in [(main_outliers_info, self.config.input.measure_type_unknown), (cal_outliers_info, self.config.input.measure_type_std)]:
             if all_outliers_info is None:
                 continue
             
             for outliers_info in all_outliers_info:
-                if use_unit_col:
-                    ct_values = data[data[self.config.input.unit_col] == unit_tag]
-                else:
-                    ct_values = data[data[self.config.input.unit_other_col] == unit_tag]
-                gene_groups = ct_values.groupby(self.config.input.gene_type_col)
-                apply_to_genes = outliers_info.get("genes", [])
-                if isinstance(apply_to_genes, str):
-                    apply_to_genes = [apply_to_genes]
-                if apply_to_genes is not None:
-                    apply_to_genes = [g.strip().lower() for g in apply_to_genes]
+                ct_values = data[data[self.config.input.measure_type_col] == measure_type]
+                target_groups = ct_values.groupby(self.config.input.target_col)
+                apply_to_targets = outliers_info.get("targets", [])
+                if isinstance(apply_to_targets, str):
+                    apply_to_targets = [apply_to_targets]
+                if apply_to_targets is not None:
+                    apply_to_targets = [g.strip().lower() for g in apply_to_targets]
                 rng = outliers_info.get("range", None)
                 max_stdev = outliers_info.get("max_stdev", None)
                 min_replicates = outliers_info.get("min_replicates", None)
                 max_replicates = outliers_info.get("max_replicates", None)
 
-                # We group by gene and sample ID
-                for gene_name, gene_group in gene_groups:
-                    if len(apply_to_genes) > 0 and gene_name.lower() not in apply_to_genes:
+                # We group by target and sample ID
+                for target_name, target_group in target_groups:
+                    if len(apply_to_targets) > 0 and target_name.lower() not in apply_to_targets:
                         continue
-                    for idx, sample_id in enumerate(gene_group[self.config.input.sample_id_col].str.lower().unique()):
-                        cur_data = gene_group[gene_group[self.config.input.sample_id_col].str.lower() == sample_id]
+                    for idx, sample_id in enumerate(target_group[self.config.input.sample_id_col].str.lower().unique()):
+                        cur_data = target_group[target_group[self.config.input.sample_id_col].str.lower() == sample_id]
                         cur_data = cur_data.copy()
 
                         self.flag_outliers(cur_data, [data, master_df], max_stdev, rng, min_replicates, max_replicates)
@@ -1372,11 +1407,11 @@ class QPCRQAQC(object):
                         # orderings = None
                         # if "grouped_values" in outliers_info:
                         #     for grouped_values in outliers_info.grouped_values:
-                        #         genes = grouped_values.genes
-                        #         if isinstance(genes, str):
-                        #             genes = [genes]
-                        #         genes = [g.strip().lower() for g in genes]
-                        #         if gene_name.lower() in genes:
+                        #         targets = grouped_values.targets
+                        #         if isinstance(targets, str):
+                        #             targets = [targets]
+                        #         targets = [g.strip().lower() for g in targets]
+                        #         if target_name.lower() in targets:
                         #             orderings = grouped_values.groups
                         #             break
 
@@ -1418,7 +1453,7 @@ class QPCRQAQC(object):
         if isinstance(modify_dfs, pd.DataFrame):
             modify_dfs = [modify_dfs]
 
-        ct = self.config.input.value_col
+        ct = self.config.input.ct_col
         max_replicates = min(len(data.index), max_replicates) if max_replicates is not None else len(data.index)
         min_replicates = min_replicates or 0
         
@@ -1546,4 +1581,3 @@ class QPCRQAQC(object):
         except Exception as e:
             import traceback
             traceback.print_exc()
-

@@ -5,8 +5,7 @@ This folder contains all the main QPCR Analyzer code.
 Order of execution will typically be the following:
 
 1. **qpcr_extracter.py**: Extract data from BioRad PDFs or Excel files (QPCRExtracter). See [qpcr_extracter.md](qpcr_extracter.md) for details.
-2. **biorad_mapper.py**: Map the extracted data to ODM format (BioRadMapper).
-3. **qpcr_populator.py**: Populate our output files (QPCRPopulator). See [qpcr_populator.md](qpcr_populator.md) for details.
+2. **qpcr_populator.py**: Populate our output files (QPCRPopulator). See [qpcr_populator.md](qpcr_populator.md) for details.
 
 In addition to the above, there are several other options that can be performed. To see a full implementation on a Lambda Function, see [lambda_container](../lambda_container/).
 

@@ -1,0 +1,92 @@
+#
+#
+#
+
+input:
+    sq_col: "sq"
+    ct_col: "ct"
+    index_col: "index"
+    analysis_date_col: "analysisDate"
+    site_id_col: "siteID"
+    sample_date_col: "sampleDate"
+    sample_id_col: "sampleID"
+    match_sample_id_col: "matchSampleID"
+    plate_id_col: "plateID"
+    standard_curve_id_col: "standardCurveID"
+    measure_type_col: "measureType"
+    measure_type_std: "std"
+    measure_type_unknown: "unkn"
+    measure_type_ntc: "ntc"
+    measure_type_eb: "eb"
+    target_col: "target"
+    sample_short_description_col: "typeShortDescription"
+    sample_description_col: "typeDescription"
+    sampling_type_col: "sampleType"
+
+    # For calculating slope and intercept internally (ie. not from the Excel spreadsheet), use at most
+    # this many replicates for each standard. This should usually match the number of standards
+    # shown in the Excel spreadsheet 
+    slope_and_intercept_replicates: 3
+
+    # If True, then all unknowns must have a standard curve on the same plate. Those that don't will be removed.
+    # If False, then if a standard curve is missing on a plate, we'll try to use the most recent one. We will remove any without a standard curve
+    require_cal_curve_on_same_plate: True
+
+    # remove_time_cols: ["analysisDate", "sampleDate"]
+
+    # Sort all rows in the master input sheet by these columns. Sorted by last item in order_by first.
+    order_by:
+        - "sampleDate"
+        - "sampleID"
+        - "index"
+
+    main_targets:
+        - "covN1"
+        - "covN2"
+
+    other_targets:
+
+    inhibition_targets:
+        - "PMMoV"
+        - "PMMoV:10"
+        - "PMMoV:40"
+
+    normalizing_targets:
+        - "PMMoV:10"
+
+    # Each of these targetss share the same standard curve as the dictionary key
+    standard_curve_common_targets:
+        "PMMoV": [ "PMMoV", "PMMoV:10", "PMMoV:40" ]
+
+    # For samples with the specified target that have a sample ID that match the regex sample_rerun_number, we
+    # take the latest rerun and drop all other samples with the same sample ID. The rerun number
+    # is the first capture of the regular expression. The resulting sample ID is the first capture of sample_rerun_id.
+    collapse_reruns:
+        targets: [ "PMMoV" ]
+        sample_rerun_number: "_r([0-9]*)$"
+        sample_rerun_id: "(.*)_r[0-9]*$"
+
+    calibration_multi:
+        min_points: 5
+        preferred_slope: -3.3
+
+    # Applied immediately after loading the raw QPCR input (before any other processing of the data)
+    value_mappers:
+        -   match_column: "sampleID"
+            match_expression: "^\\s*EB\\s*$"
+            target_column: "measureType"
+            target_value: "eb"
+            ignore_case: True
+    
+template:
+    main_sheet_name: "Main"
+    calibration_sheet_name: "Calibration"
+    calibration_location: "main_sheet"    # "main_sheet" | "cal_sheet" | "caltarget_sheet" | "hide"
+    rows_between_main_groups: 0
+    rows_between_cal_groups: 1
+    main_banners_and_headers_once: False
+    cal_origin: [2, 2]
+    main_origin: [1, 1]
+    chart_column_spacing: 0
+    max_chart_height_rows: 10
+    main_sheet_freeze_panes: "B1"

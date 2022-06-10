@@ -1,0 +1,54 @@
+qpcr_format_name: "AriaMX"
+
+# Columns defining this QPCR format. If a table has all of these columns then the table is for
+# this config file's format.
+match_columns_in_raw:
+    - "Well"
+    - "Target"
+    - "Well Type"
+    - "Well Name"
+    - "Cq (∆Rn)"
+
+# Delete these columns from the raw table
+# delete_columns_from_raw: [
+# ]
+
+# Extract these columns from the raw table and rename them
+extract_columns:
+    -   origin: "Well"
+        target: "wellID"
+    -   origin: "Target"
+        target: "target"
+    -   origin: "Well Type"
+        target: "measureType"
+    -   origin: "Well Name"
+        target: "sampleID"
+    -   origin: "Cq (∆Rn)"
+        target: "ct"
+    -   origin: "Quantity (copies)"
+        target: "sq"
+
+# Apply these regex operations to each extracted column
+# Keys are:
+#   columns: list[str]|str - The column(s) to apply the regex to
+#   targetColumns: list[str]|str|None - The result of the regex are assigned
+#       to these columns. If empty then columns are changed in place.
+#   match: The regex to match
+#   replace: The replacement for the regex. Tags are specified by \\n.
+mappers:
+    -   columns: "measureType"
+        match: "Standard"
+        replace: "std"
+    -   columns: "measureType"
+        match: "Unknown"
+        replace: "unkn"
+    -   columns: "measureType"
+        match: "No RT"
+        replace: "eb"
+    -   columns: "measureType"
+        match: "NTC"
+        replace: "ntc"
+    -   columns: [ "ct", "sq" ]
+        match: "No Cq"
+        replace: ""
+# @TODO: Check if No RT means eb?

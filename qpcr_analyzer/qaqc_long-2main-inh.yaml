@@ -1,0 +1,281 @@
+column_targets:
+    PMMoV:
+        - "main_col_inhibition_a_ct"
+        - "main_col_inhibition_a_ct_avg"
+        - "main_col_inhibition_b_a_dct"
+        - "main_col_inhibition_c_b_dct"
+    PMMoV:10:
+        - "main_col_norm_ct"
+        - "main_col_norm_ct_avg"
+        - "main_col_norm_copies"
+        - "main_col_inhibition_b_ct"
+        - "main_col_inhibition_b_ct_avg"
+    PMMoV:40:
+        - "main_col_inhibition_c_ct"
+        - "main_col_inhibition_c_ct_avg"
+
+qaqc_priorities:
+    # Highlighting of priorities earlier in this list take precedence (ie. more serious errors should go first)
+    -   name: "Highest"
+        fill: "FF0000"
+        font: "000000"
+        bold: True
+    -   name: "High"
+        fill: "FF7D7D"
+        font: "9E0000"
+        bold: True
+    -   name: "Medium"
+        fill: "F7CAAC"
+        font: "833C0B"
+        bold: True
+    -   name: "Medium Low"
+        fill: "FFF2CC"
+        font: "000000"
+        bold: False
+    -   name: "Low"
+        fill: "D0CECE"
+        font: "3B3838"
+        bold: False
+    -   name: "Very Low"
+        fill: "D5DCE4"
+        font: "3B3838"
+        bold: False
+    -   name: "Good"
+        fill: "00CC00"
+        font: "000000"
+        bold: True
+
+non_detects:
+    -   category: "Non-detect"
+        description: "Test for non-detects/missing"
+        priority: "Very Low"
+        sheets: [ "main", "cal" ]             # "main" and/or "cal"
+        columns: [ "main_col_ct", "main_col_ct_b", "main_col_norm_ct", "main_col_inhibition_a_ct", "main_col_inhibition_b_ct", "main_col_inhibition_c_ct", "cal_col_ct" ]
+        bad_matches: [ "<ND>", "<MISSING>" ]
+
+no_detection_rows:
+    -   category: "Ct Detection"
+        description: "Samples require at least one Ct value"
+        priority: "Very Low"
+        columns: ["main_col_ct", "main_col_ct_b"]
+        targets: []
+        min_detections: 1
+
+sample_data_available:
+    category: "Samples Data"
+    description: "Samples log sheet data available (sample date, tube empty/full weight...)"
+    priority: "Very Low"
+    columns: ["main_col_sample_date"]
+    not_available_matches: [ "NaT", "", 0 ]
+    targets: []
+
+standard_curves:
+    curves:
+        -   category: "Calibration Curves"
+            slope_description: "Calibration slope in range [{target}]"
+            rsq_description: "Calibration R-sq in range [{target}]"
+            intercept_description: "Calibration intercept in range [{target}]"
+            replicates_description: "Average standard #{std_num} in range [{target}, Ct]"
+            slope_priority: "High"
+            rsq_priority: "High"
+            intercept_priority: "High"
+            replicates_priority: "High"
+
+            targets: [ "covN1", "covN2" ]
+            slope_range: [ -3.74, -3.00 ]
+            intercept_range: [ 37.00, 39.45 ]
+            rsq_range: [ 0.95, NULL ]
+            # average_replicates_range:
+            #     - [ 28.00, 29.99 ]
+            #     - [ 29.91, 32.52 ]
+            #     - [ 31.88, 34.50 ]
+            #     - [ 33.36, 35.47 ]
+            #     - [ 34.05, 36.65 ]
+            #     - [ 35.05, 37.65 ]
+        
+        -   category: "Calibration Curves"
+            slope_description: "Calibration slope in range [{target}]"
+            rsq_description: "Calibration R-sq in range [{target}]"
+            intercept_description: "Calibration intercept in range [{target}]"
+            replicates_description: "Average standard #{std_num} in range [{target}, Ct]"
+            slope_priority: "High"
+            rsq_priority: "High"
+            intercept_priority: "High"
+            replicates_priority: "High"
+
+            targets: [ "PMMoV" ]
+            slope_range: [ -3.50, -2.78 ]
+            intercept_range: [ 37.23, 40.84 ]
+            rsq_range: [ 0.95, NULL ]
+            # average_replicates_range:
+            #     - [ 22.81, 24.97 ]
+            #     - [ 24.60, 26.81 ]
+            #     - [ 26.32, 28.90 ]
+            #     - [ 28.39, 30.60 ]
+            #     - [ 30.17, 33.08 ]
+
+    inter_comparisons:
+        -   category: "Calibration Curve"
+            description: "{target_a}, {target_b} standards #{std_num} comparable"
+            priority: "Medium"
+            targets: [ "covN1", "covN2" ]
+            abs_diff_max: [
+                0.6
+                0.6
+                1.0
+                1.0
+                1.0
+            ]
+
+    samples_within_calibration_curve:
+        -   category: "Calibration Curve"
+            description: "Sample Ct values within calibration curve limits [{target}]"
+            priority: "High"
+            targets: []
+            normalizer_target: "PMMoV"
+            columns: [ "main_col_ct", "main_col_ct_b" ]
+            normalizer_columns: [ "main_col_norm_ct" ]
+
+comparable_targets:
+    -   category: "Comparable Samples"
+        description: "Average Ct comparable [abs({target_a}(Ct) - {target_b}(Ct))]"
+        priority: "Medium"
+        targets: [ "covn1", "covn2" ]
+        ranges:
+            -   ct_range_filter: [ NULL, 35.5 ]
+                abs_diff_max: 1.0
+                requires: "all"
+            -   ct_range_filter: [ 35.5, NULL ]
+                abs_diff_max: 1.5
+                requires: "one"
+
+loq:
+    -   category: "LOQ"
+        description: "Test above LOQ [copies per well, {target}]"
+        priority: "High"
+        targets: [ "covN1" ]
+        copies_per_well_range: [ 4, NULL ]
+        columns: [ "main_col_copies" ]
+    -   category: "LOQ"
+        description: "Test above LOQ [copies per well, {target}]"
+        priority: "High"
+        targets: [ "covN2" ]
+        copies_per_well_range: [ 6, NULL ]
+        columns: [ "main_col_copies" ]
+    # -   category: "LOQ"
+    #     description: "Test above LOQ [copies per well, PMMoV:10]"
+    #     priority: "High"
+    #     targets: [  ]
+    #     copies_per_well_range: [ 6, NULL ]
+    #     columns: [ "main_col_norm_copies" ]
+
+normalizer_ct_range:
+    category: "Normalizer"
+    description: "Normalizer {target} Ct in range [site: {site}]"
+    priority: "Medium Low"
+    target: "PMMoV"
+    ranges:
+        "o": [25.00, 28.00]
+        "g": [25.00, 28.00]
+        "h": [25.00, 28.00]
+        "bmi": [25.00, 31.50]
+        "mh": [25.00, 31.50]
+        "vc1": [27.00, 30.00]
+        "vc2": [29.00, 31.00]
+        "vc3": [28.00, 30.00]
+        "nfd": [30.00, 32.00]
+        "nfg": [28.00, 31.00]
+        "uo_sp": [28.00, 31.00]
+        "uo_na": [28.00, 31.00]
+        "uo_np": [28.00, 31.00]
+        "uo_nt": [28.00, 31.00]
+        "uo_st": [28.00, 31.00]
+        "h_mh": [28.00, 31.00]
+
+inhibitions:
+    -   category: "Inhibition"
+        description: "Test for inhibition: 1/10 dilution vs Full"
+        priority: "High"
+        columns: [ "main_col_inhibition_b_a_dct" ]
+        range: [2.6, 3.6]
+        accept_blanks: False
+    -   category: "Inhibition"
+        description: "Test for inhibition: 1/40 dilution vs 1/10 dilution"
+        priority: "High"
+        columns: [ "main_col_inhibition_c_b_dct" ]
+        range: [4.0, 6.0]
+        accept_blanks: False
+
+copies_outliers:
+    -   category: "Copies Outliers"
+        description: "Copies per mass outliers [{target}]"
+        priority: "Medium Low"
+        columns: ["main_col_copies_per_mass", "main_col_copies_per_mass_b"]
+        # columns: "main_col_copies_per_mass"
+        num_stdev: 1
+    -   category: "Copies Outliers"
+        description: "Copies per copies outliers [{target}]"
+        priority: "Medium Low"
+        columns: ["main_col_copies_per_copies", "main_col_copies_per_copies_b"]
+        # columns: "main_col_copies_per_copies"
+        num_stdev: 1
+    -   category: "Copies Outliers"
+        description: "Copies per L outliers [{target}]"
+        priority: "Medium Low"
+        columns: ["main_col_copies_per_volume", "main_col_copies_per_volume_b"]
+        # columns: "main_col_copies_per_volume"
+        num_stdev: 1
+
+ntcs:
+    -   category: "NTC"
+        description: "NTC test for contamination: {target} (Ct)"
+        measure_type: "ntc"
+        priority: "Highest"
+        targets: [ "covN1", "covN2" ]
+        ct_range: [ NULL, NULL ]
+        source_max: "all_target_ct"         # "all_target_ct" | "cal_target_ct"
+        delta_from_max_ct: 5
+    -   category: "NTC"
+        description: "NTC test for contamination: {target} (Ct)"
+        measure_type: "ntc"
+        priority: "Highest"
+        targets: [ "PMMoV", "PMMoV:10", "PMMoV:40" ]
+        ct_range: [ 38, NULL ]
+        source_max: "all_target_ct"         # "all_target_ct" | "cal_target_ct"
+        delta_from_max_ct: 5
+    -   category: "EB"
+        description: "Extraction blank: {target} (Ct)"
+        measure_type: "eb"
+        priority: "Highest"
+        targets: [ ] #[ "covN1", "covN2", "PMMoV" ]
+        ct_range: [ NULL, NULL ]
+        source_max: "all_target_ct"         # "all_target_ct" | "cal_target_ct"
+        delta_from_max_ct: 5
+
+# NOTE: ct_outliers are not stored in the output QAQC sheet. They are marked by adding
+# square brackets around the Ct values.
+main_ct_outliers:
+    -   category: "Ct Outliers"
+        description: "Standard deviation Ct above {max_stdev}"
+        priority: "Low"
+        max_stdev: 0.5
+        min_replicates: 2
+        max_replicates: 3
+        targets: [ "covN1", "covN2", "PMMoV:10" ]
+        columns: [ "main_col_ct", "main_col_ct_b", "main_col_norm_ct", "main_col_inhibition_a_ct", "main_col_inhibition_b_ct", "main_col_inhibition_c_ct" ]
+
+cal_ct_outliers:
+    -   category: "Ct Outliers"
+        description: "Calibration curve Ct standard deviation above {max_stdev}"
+        priority: "Low"
+        max_stdev: 0.5
+        min_replicates: 2
+        max_replicates: 3
+        targets: [  ]
+        columns: [ "cal_col_ct" ]
+
+# Colors for EB/NTC failure/success (see custom_functions.py __QAQCHASFAILEDCATEGORY)
+failed_categories:
+    failed_priority: "Highest"
+    success_priority: "Good"
+    empty_priority: "Good"

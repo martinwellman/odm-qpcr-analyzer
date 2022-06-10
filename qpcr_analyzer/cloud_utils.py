@@ -19,6 +19,14 @@ HTTP_PREFIX = "http://"
 HTTPS_PREFIX = "https://"
 GDRIVE_PREFIX = "gd://"
 
+def is_on_google_drive(file):
+    if is_gdrive(file):
+        return True
+    
+    return file.startswith("https://drive.google.com") or \
+        file.startswith("https://docs.google.com") or \
+        len(re.sub("[A-Za-z0-9-_]", "", file)) == 0
+        
 def is_s3(file):
     return get_prefix(file).lower() == S3_PREFIX.lower()
 
@@ -124,6 +132,9 @@ def download_file(download_path, target_path=None, target_dir=None, preserve_dir
                 target_path = os.path.join(td, os.path.basename(remote_path))
         return target_path
 
+    # Format the URL so that a Google Drive/Docs URL is for downloading the file (rather than something else, like editing the file)
+    download_path = gdrive_utils.clean_url_for_download(download_path)
+
     if is_s3(download_path):
         print(f"Downloading {download_path}")
         bucket, key = bucket_and_key(download_path)
@@ -139,6 +150,11 @@ def download_file(download_path, target_path=None, target_dir=None, preserve_dir
             return None
         return target_path
     elif is_http_or_https(download_path):
+        def _retry_with_gd():
+            file_id = gdrive_utils.get_fileid_from_url(download_path)
+            if file_id:
+                return download_file(f"{GDRIVE_PREFIX}::{file_id}::", target_path=target_path, target_dir=target_dir, preserve_directory_structure=preserve_directory_structure)
+            return None            
         print(f"Downloading {download_path}")
         prefix, domain, path = prefix_and_domain_and_path(download_path)
         target_path = _get_local_target_path(target_path, path)
@@ -146,16 +162,16 @@ def download_file(download_path, target_path=None, target_dir=None, preserve_dir
         try:
             if os.path.dirname(target_path):
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
-            response = requests.get(download_path)
+            response = requests.get(download_path, allow_redirects=False)
             if response.status_code == requests.codes.ok:
                 with open(target_path, "wb") as f:
                     f.write(response.content)
             else:
                 print(f"ERROR downloading {download_path}")
-                return None
+                return _retry_with_gd()
         except Exception as e:
             print(f"EXCEPTION downloading {download_path}: {e}")
-            return None
+            return _retry_with_gd()
         return target_path
     elif is_gdrive(download_path):
         print(f"Downloading from Google Drive {download_path}")
@@ -230,4 +246,3 @@ def upload_file(file_name, upload_path):
         except Exception as e:
             print(f"Exception uploading {file_name} to local destination {upload_path}: {e}")
             return False
-

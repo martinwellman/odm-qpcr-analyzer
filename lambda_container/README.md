@@ -110,7 +110,6 @@ The entry-point of the Lambda function is the `handler()` function in [source/ap
     1. Get settings from the event, and download all input and config files from the S3 bucket (or elsewhere).
     1. Run QPCRUpdater on all input files if remote_target is set. The QPCRUpdater updates master output files on Google Drive or S3. For any files that the updater recognizes, it will update the remote targets. All other files (that the updater doesn't recognize) will be passed on to the extracter.
     1. Run QPCRExtracter to extract all data from the input.
-    1. Run BioRadMapper to map the extracted files to ODM format.
     1. Run QPCRPopulator to create all the output reports.
     1. Run QPCRUpdater again on the QPCRPopulator output (if remote_target is set), to add any new reports to the remote targets.
     1. Create the email with all attachments and send it to the user.

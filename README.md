@@ -25,14 +25,6 @@ To install the QPCR Analyzer on your computer run the following commands:
 
 The script [localfixes.sh](qpcr_analyzer/localfixes.sh) applies changes to OpenPYXL, Ghostscript, and PyCel. These changes will affect your local copies of the OpenPYXL, Ghostscript, and PyCel packages, but should not affect behavior of other scripts that use these packages. If you would like to prevent these changes from affecting other scripts, set up a separate virtual environment for the QPCR Analyzer with a tool such as pyenv. In the future, these changes will be moved to a separate GitHub repository. For details on what [localfixes.sh](qpcr_analyzer/localfixes.sh) does, see [qpcr_analyzer/README.md](qpcr_analyzer/README.md).
 
-Install the [ODM-Import](https://github.com/jeandavidt/ODM-Import) repo (NOTE: This is temporarily set to the fork at [martinwellman/ODM-Import.git](https://github.com/martinwellman/ODM-Import.git), it will be changed back to jeandavidt/ODM-Import soon):
-
-    git clone https://github.com/martinwellman/ODM-Import.git
-    cd ODM-Import
-    pip install -e .
-
-The `ODM-Import` package has various tools and utilities for converting data files to ODM format. The mapper that the QPCR Analyzer uses is called `BioRadMapper`, found at [wbe_odm/odm_mappers/biorad_mapper.py](https://github.com/jeandavidt/ODM-Import/blob/main/wbe_odm/odm_mappers/biorad_mapper.py).
-
 ## Example
 
 To see a bare-bones example of how to use the QPCR Analyzer see [examples/example_fullrun.py](examples/example_fullrun.py). This example extracts data from BioRad output files, maps that data to ODM format, and generates the final report along with QA/QC results. It uses sample BioRad files obtained from a lab based at uOttawa.

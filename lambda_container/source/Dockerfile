@@ -38,8 +38,4 @@ RUN DIR=$(cat OPENPYXL_DIR.txt); find "$DIR/cell" -name cell.py | xargs sed -i.b
 RUN DIR=$(cat OPENPYXL_DIR.txt); find "$DIR/cell" -name _writer.py | xargs sed -i.bak "s/^            value = None/            value = getattr(cell, 'calculated_value', None)\n            if isinstance(value, str):\n                if len(value) > 0 and value[0] == '#' and value[-1] in ['!', '?']:\n                    el.set('t', 'e')\n                else:\n                    el.set('t', 'str')/g"
 RUN DIR=$(cat OPENPYXL_DIR.txt); find "$DIR/cell" -name _writer.py | xargs sed -i.bak "s/^                    value = None/                    raise RuntimeError('Must implement custom calculated_value for LXML')/g"
 
-# RUN git clone https://github.com/jeandavidt/ODM-Import.git
-RUN git clone https://github.com/martinwellman/ODM-Import.git
-RUN cd ODM-Import && pip3 install -e .
-
 CMD ["app.handler"]

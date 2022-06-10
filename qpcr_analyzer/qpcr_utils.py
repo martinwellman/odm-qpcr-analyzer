@@ -1,7 +1,6 @@
 #%%
 """
-qpcr_utils.py
-=============
+# qpcr_utils.py
 
 Some miscellaneous helper utilities and variables used by the QPCR code.
 """
@@ -13,12 +12,13 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils import units
 import re
 import pandas as pd
+import traceback
 
 OUTLIER_COL = "__outlier_values"
 
 MAIN_SHEET = "Main"
 SINGLE_CAL_SHEET = "Cal"
-CAL_SHEET_FMT = "Cal-{gene}-{plateID}"
+CAL_SHEET_FMT = "Cal-{targetName}-{plateID}"
 
 # These two (commented-out) formulas are alternatives to the above that accomplish the same thing but
 # tests outliers also (outliers are enclosed in square brackets). Normally we do not want to test the outliers
@@ -26,23 +26,24 @@ CAL_SHEET_FMT = "Cal-{gene}-{plateID}"
 # QAQC_DEFAULT_VALIDATES_FORMULA = "AND(ISNUMBER({col='Value'}{row}), OR({col='Value'}{row}>={col='Lower Limit'}{row}, {col='Lower Limit'}{row}=\"\"), OR({col='Value'}{row}<={col='Upper Limit'}{row}, {col='Upper Limit'}{row}=\"\"))"
 # QAQC_VALUE_FORMULA = '=IF({cell_ref}="", "", IF(ISNUMBER({cell_ref}), {cell_ref}, VALUE(SUBSTITUTE(SUBSTITUTE({cell_ref},"[",""),"]",""))))'
 
-INDEX_KEY = "_index_"
-REPLICATE_NUM = "#"
-
 MAIN_ROW_DATA = "main_row_data"
 CAL_ROW_DATA = "cal_row_data"
-MAIN_COL_BL_CT = "main_col_bl_ct"
+MAIN_COL_NORM_CT = "main_col_norm_ct"
 MAIN_COL_CT_AVG = "main_col_ct_avg"
 MAIN_COL_CT = "main_col_ct"
 
 # Regex for searching for tags, eg {value_0:0.3f|BLANK|MISSING}. BLANK is an optional alternate text to show if the value exists but is empty (ie. value_0="" or None)
 # MISSING is alternate text to use if the value doesn't exist (ie. value_0 doesn't exit)
-# $1 = "value_0"
+# $1 = "key_0>key_1>value_2"
 # $2 = ":0.3f"
 # $3 = "|BLANK"
 # $4 = "|MISSING"
 PARSE_VALUES_REGEX = "\{(%s)(:?[^\s|]*)(\|?[^\}\|]*)(\|?[^\}]*)\}"
-PARSE_VALUES_REGEX_ANYKEY = re.compile(PARSE_VALUES_REGEX % "[0-9A-Za-z_\.]*", flags=re.IGNORECASE)
+PARSE_VALUES_REGEX_ANYKEY = re.compile(PARSE_VALUES_REGEX % "[0-9A-Za-z_\.\>]*", flags=re.IGNORECASE)
+
+PARSE_REP_REGEX = re.compile("(.*)_([0-9]*)$", flags=re.IGNORECASE)
+
+TAG_KEY_SEPARATOR = ">"
 
 class QPCRError(Exception):
     pass
@@ -251,7 +252,8 @@ def sheet_to_df(sheet):
     df = pd.DataFrame(data, columns=columns)
     return df
 
-def parse_values(v, **kwargs):
+
+def parse_values(v, data, **kwargs):
     """Parse all tags in the string v (case insensitive). These are the tags enclosed in curly braces (eg. "value_covn1_0")
 
     If v contains tags in curly braces that are not in kwargs, then they are left unchanged in v.
@@ -270,7 +272,7 @@ def parse_values(v, **kwargs):
         Dictionary of values for all the recognized tags. The keys are the tags (without curly braces). The values
         are either the literal value or a dictionary. If a dictionary, it contains "value" which is the value,
         "data" which is the pd.DataFrame data in WWMeasure associated with the value, and "re_match" which is a compiled
-        regular expression that finds the tag. See populate_format_args and add_array_values.
+        regular expression that finds the tag.
 
     Returns
     -------
@@ -281,20 +283,20 @@ def parse_values(v, **kwargs):
     """
     if not isinstance(v, str):
         return v, []
-
-    if INDEX_KEY in kwargs:
-        v = v.replace(REPLICATE_NUM, kwargs[INDEX_KEY])
-
+    
+    data = (data or {}).copy()
+    data.update(kwargs)
+    
     # Parse all tags in curly braces, the tag names are the keys in kwargs. They can have formatting 
     # options (passed to str.format). We scan the string v in reverse order, parsing the latest tags first since
     # it's easier for embedded tags. If a tag doesn't exist in kwargs, then we keep it in the string (with curly
     # braces) since we might want to parse those some other time in the future.
     closing_brackets = []
 
-    format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
-    data_args = { k.lower() : v for k, v in kwargs.items() if isinstance(v, (dict, EasyDict))}
+    # format_args = { k.lower() : v["value"] if isinstance(v, (dict, EasyDict)) else v for k, v in kwargs.items() }
+    # data_args = { k.lower() : v for k, v in kwargs.items() } # if isinstance(v, (dict, EasyDict))}
     matching_data = []
-
+    
     for idx in range(len(v))[::-1]:
         if v[idx] == "}":
             closing_brackets.append(idx)
@@ -308,18 +310,18 @@ def parse_values(v, **kwargs):
             try:
                 # See if any tags that have associated data are present. We add the associated data to the matching_data
                 # list.
-                for data_key, data_vals in data_args.items():
-                    regex = data_vals.get("re_match", None)
-                    if regex is None:
-                        regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
-                    if re.match(regex, sub_str):
-                        matching_data.extend(data_vals["data"])
+                # for data_key, data_vals in data_args.items():
+                #     regex = data_vals.get("re_match", None)
+                #     if regex is None:
+                #         regex = re.compile(PARSE_VALUES_REGEX % data_key, flags=re.IGNORECASE)
+                #     if re.match(regex, sub_str):
+                #         matching_data.extend(data_vals["data"])
 
                 # sub_str is the substring of v starting at our current index idx up to the end of the string.
                 match = re.match(PARSE_VALUES_REGEX_ANYKEY, sub_str)
                 if match is not None:
                     # We found a string in curly braces!
-                    # The format is {key:fmt|blank|missing}, where {key:fmt} is passed to the string's
+                    # The format is {key1>key2>...>keyn:fmt|blank|missing}, where {key:fmt} is passed to the string's
                     # format call, blank is used if the key exists but is blank, and missing is used if
                     # the key doesn't exist. If missing is not specified and key does not exist then
                     # we keep the full tag in the string unmodified.
@@ -327,26 +329,94 @@ def parse_values(v, **kwargs):
                     fmt = match[2]
                     blank_text = match[3]
                     missing_text = match[4]                                        
-                    sub_str = "{%s%s}" % (key, fmt)
-                    if key in format_args.keys():
-                        if len(blank_text) > 0 and (pd.isna(format_args[key]) or str(format_args[key]) == ""):
+                    sub_str = "{%s%s}" % (key.replace(TAG_KEY_SEPARATOR, "_"), fmt)
+                    
+                    # Descend into cur_data to retrieve the value with the key
+                    top_child = None
+                    key_path = key.split(TAG_KEY_SEPARATOR)
+                    cur_data = {k.lower() : v for k,v in data.items()}
+                    for cur_key in key_path[:-1]:
+                        if isinstance(cur_data, dict):
+                            cur_data = {k.lower() : v for k,v in cur_data.items()}
+                            cur_data = cur_data[cur_key]
+                            if top_child is None:
+                                top_child = cur_data
+                        else:
+                            cur_data = None
+                            break
+
+                    key_present = False
+                    if cur_data is not None:
+                        # Match found!
+                        if top_child is not None:
+                            matching_data.append(top_child)
+                        cur_value = None
+                        last_key = key_path[-1]
+                        last_key_repnum = None
+                        last_key_without_rep = None
+
+                        # Last keys that end in _# may either be the final key name, or it may
+                        # reference a replicate number. eg. key_1 might be cur_data["key_1"] or
+                        # if that doesn't exist it might be cur_data["key"][1]
+                        rep = re.search(PARSE_REP_REGEX, last_key)
+                        if rep is not None and len(rep.groups()) == 2:
+                            try:
+                                last_key_repnum = int(rep.group(2))
+                            except:
+                                pass
+                            last_key_without_rep = rep.group(1)
+                        
+                        if isinstance(cur_data, dict):
+                            cur_data = {k.lower() : v for k,v in cur_data.items()}
+                            if last_key in cur_data:
+                                cur_value = cur_data[last_key]
+                                key_present = True
+                            elif last_key_without_rep in cur_data:
+                                sub_value = cur_data[last_key_without_rep]
+                                if isinstance(sub_value, (list, tuple, np.ndarray)) and len(sub_value) > last_key_repnum:
+                                    cur_value = sub_value[last_key_repnum]
+                                    key_present = True
+                        elif isinstance(cur_data, (pd.Series, pd.DataFrame)):
+                            if not cur_data.empty:
+                                is_df = isinstance(cur_data, pd.DataFrame)
+                                cur_columns = [k.lower() for k in (cur_data.columns if is_df else cur_data.index)]
+                                if last_key in cur_columns:
+                                    col = (cur_data.columns if is_df else cur_data.index)[cur_columns.index(last_key)]
+                                    cur_value = cur_data[col]
+                                    if isinstance(cur_value, (pd.Series, pd.DataFrame)):
+                                        cur_value = cur_value.iloc[0]
+                                    key_present = True
+                                elif last_key_without_rep in cur_columns:
+                                    col = (cur_data.columns if is_df else cur_data.index)[cur_columns.index(last_key_without_rep)]
+                                    sub_value = cur_data[col]
+                                    if (len(sub_value.index) if is_df else 1) > last_key_repnum:
+                                        cur_value = sub_value
+                                        if isinstance(cur_value, (pd.Series, pd.DataFrame)):
+                                            cur_value = cur_value.iloc[last_key_repnum]
+                                        key_present = True
+                    if key_present:
+                        if len(blank_text) > 0 and (pd.isna(cur_value) or str(cur_value) == ""):
                             replace = blank_text[1:]
                         else:
-                            replace = sub_str.format(**format_args)
+                            fmt = { key.replace(TAG_KEY_SEPARATOR, "_") : cur_value }
+                            replace = sub_str.format(**fmt)
                     elif len(missing_text) > 0:
                         replace = missing_text[1:]
             except Exception as e:
                 print("EXCEPTION:", e)
+                traceback.print_exc()
+
                 pass
 
             v = "{}{}{}".format(v[:idx], replace, v[matching_close+1:])
 
     if len(closing_brackets) > 0:
         raise ValueError("ERROR: Unmatched '{'")
-
+    
     return v, matching_data
 
 def cleanup_file_name(file_name):
     # file_name = re.sub(r"[:=+\*\\/&]", "-", file_name)
     file_name = re.sub(r"[^A-Za-z0-9\.\-\(\)\[\] {}\<\>_]", "-", file_name)
     return file_name
+

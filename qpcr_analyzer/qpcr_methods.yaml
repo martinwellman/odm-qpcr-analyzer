@@ -1,0 +1,25 @@
+columns:
+    - ["Method_ID", "methodID"]
+    - ["Fraction_Extracted", "fractionExtracted"]
+    - ["Elution_volume_(uL)", "elutionVolume"]
+    - ["Target", "target"]
+    - ["Target_Aliases", "targetAliases"]
+    - ["Dilution_Factor", "dilutionFactor"]
+    - ["sloq", "sloq"]
+    - ["slod", "slod"]
+    - ["Template_volume_(uL)", "templateVolume"]
+    - ["inhibitor_Indicator", "inhibitorIndicator"]
+    - ["Expected_value", "expectedValue"]
+    - ["reading_1", "reading1"]
+    - ["reading_2", "reading2"]
+    - ["reading_3", "reading3"]
+    - ["Delta_ 1_2", "delta_1_2"]
+    - ["Delta_ 2_3", "delta_2_3"]
+    - ["Cycle_delay", "cycleDelay"]
+    - ["Acceptable_range", "acceptableRange"]
+    - ["Target_needs_normalizing", "targetNeedsNormalizing"]
+    - ["Target_is_the_normalizer", "targetIsTheNormalizer"]
+
+defaults:
+    -   column: "dilutionFactor"
+        default: 1

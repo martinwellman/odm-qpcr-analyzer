@@ -9,22 +9,22 @@ each site sampling type (eg. rawWW in ODM maps to the description "Influent" (sh
 
 ## Usage
 
-    sites = QPCRSites("sites.yaml", "sites.xlsx")
+    sites = QPCRSites("qpcr_sites.yaml", "qpcr_sites.xlsx")
     siteid = sites.get_sample_siteid("o.08.20.21")          # eg: "o"
     sitetitle = sites.get_sample_site_title("o.08.20.21")   # eg: "Ottawa"
 """
 
-from easydict import EasyDict
 import pandas as pd
-import numpy as np
-import yaml
+import os
 from qpcr_utils import (
     rename_columns,
     parse_values,
     cleanup_file_name,
     load_config,
+    QPCRError
     )
 import re
+import cloud_utils
 
 class QPCRSites(object):
     def __init__(self, config_file, sites_file=None):
@@ -34,7 +34,10 @@ class QPCRSites(object):
 
         self.sites_df = None
         if sites_file:
-            xl =  pd.ExcelFile(sites_file)
+            try:
+                xl =  pd.ExcelFile(sites_file)
+            except:
+                raise QPCRError(f"Could not load sites file.")
             self.sites_df = xl.parse(xl.sheet_names[0])
             self.sites_df.columns = [c.strip() for c in self.sites_df.columns]
             self.sites_df.dropna(subset=[])
@@ -42,13 +45,36 @@ class QPCRSites(object):
             # Clean up column names
             all_columns = [c.column for c in self.config.columns.values()]
             rename_columns(self.sites_df, all_columns)
+            
+            missing_columns = []
 
-            # Make values lower case
+            # Process all columns
             for c in self.config.columns.values():
+                # Make sure the column exists in the df
+                if c.column not in self.sites_df.columns:
+                    missing_columns.append(c.column)
+                    continue
+                
+                # Change case of values
                 if c.get("make_lower", False):
                     self.sites_df[c.column] = self.sites_df[c.column].str.lower()
                 elif c.get("make_upper", False):
                     self.sites_df[c.column] = self.sites_df[c.column].str.upper()
+                    
+                if c.get("remove_empty_items", False):
+                    # Split the values on commas, remove the empty items, then
+                    # rejoin with commas
+                    def _remove_empty_items(v):
+                        if not isinstance(v, str):
+                            return v
+                        items = [x for x in v.strip().split(",") if x.strip()]
+                        return ",".join(items)
+                    self.sites_df[c.column] = self.sites_df[c.column].map(_remove_empty_items)
+            
+            # Raise an exception if there are missing columns
+            if len(missing_columns) > 0:
+                columns_are = "columns are" if len(missing_columns) != 1 else "column is"
+                raise QPCRError(f"The following {columns_are} missing in the sites file:", missing_columns)
 
     def get_siteid(self, siteid):
         """Get the valid siteid. If siteid is not recognized then None is returned. Site ID aliases will also be mapped to the actual site ID.
@@ -294,65 +320,6 @@ class QPCRSites(object):
             return parent_id
         return matches.iloc[0][self.config.columns.parent_title.column]
 
-    # def group_by_parentid(self, df, siteid_col, intersection_filter=None, always_include_filter=None):
-    #     """Make groups of the rows in a pd.DataFrame using the site IDs in the DataFrame. All site IDs with a common
-    #     parent ID are grouped together.
-
-    #     Parameters
-    #     ----------
-    #     df : pd.DataFrame
-    #         The DataFrame to group.
-    #     siteid_col : str
-    #         The column in the df that contains the site IDs.
-    #     intersection_filter : pd.Series | pd.DataFrame
-    #         A filter into df specifying which items in df to group. All other items are ignored for grouping purposes.
-    #     always_include_filter : pd.Series | pd.DataFrame
-    #         A filter into df specifying which additional items to include in each group.
-
-    #     Returns
-    #     -------
-    #     list
-    #         A list of groups. Each item in the list is one group, and consists of [dict, group_df], where dict contains group info such as the
-    #         parentSiteID (str) and the parentSiteTitle (str). group_df is all the items in the group.
-    #     """
-    #     groups = []
-    #     siteids = df[siteid_col]
-    #     all_siteids = []
-
-    #     for parent_id, parent_group in self.sites_df.groupby(self.config.columns.parentid.column):
-    #         cur_siteids = parent_group[self.config.columns.siteid.column]
-    #         all_siteids.extend(list(cur_siteids))
-    #         children = siteids.isin(cur_siteids)
-    #         if intersection_filter is not None:
-    #             children = children & intersection_filter
-    #         if children.sum() == 0:
-    #             continue
-
-    #         cur_filt = children
-    #         if always_include_filter is not None:
-    #             cur_filt = children | always_include_filter
-            
-    #         groups.append(({
-    #             "parentSiteID" : parent_id,
-    #             "parentSiteTitle" : self.get_parent_title(parent_id)
-    #         }, df[cur_filt]))
-
-    #     # Add unrecognized sites
-    #     site_unknowns = ~siteids.isin(all_siteids)
-    #     if site_unknowns.sum() > 0:
-    #         cur_filt = site_unknowns
-    #         if intersection_filter is not None:
-    #             cur_filt = cur_filt & intersection_filter
-    #         if always_include_filter is not None:
-    #             cur_filt = cur_filt | always_include_filter
-    #         cur_df = df[cur_filt]
-    #         groups.append(({
-    #             "parentSiteID" : self.config.unknown_siteid,
-    #             "parentSiteTitle" : self.config.unknown_siteid,
-    #         }, cur_df))
-            
-    #     return groups
-
     def group_by_file_template(self, df, siteid_col, file_template, intersection_filter=None, always_include_filter=None):
         """Group a DataFrame based on what the output path for the sample would be after parsing the tags in file_template
         for each DataFrame row. The file_template is based on the site ID of the row, and includes the tags {site_id}, 
@@ -390,7 +357,7 @@ class QPCRSites(object):
         file_column = "______filename______"
 
         def _make_filename(row):
-            return parse_values(file_template, site_id=cleanup_file_name(row[site_id_column]), site_title=cleanup_file_name(row[site_title_column]), parent_site_id=cleanup_file_name(row[parent_site_id_column]), parent_site_title=cleanup_file_name(row[parent_site_title_column]), file_id=cleanup_file_name(row[file_id_column]), sample_type=cleanup_file_name(row[sample_type_column]))[0]
+            return parse_values(file_template, None, site_id=cleanup_file_name(row[site_id_column]), site_title=cleanup_file_name(row[site_title_column]), parent_site_id=cleanup_file_name(row[parent_site_id_column]), parent_site_title=cleanup_file_name(row[parent_site_title_column]), file_id=cleanup_file_name(row[file_id_column]), sample_type=cleanup_file_name(row[sample_type_column]))[0]
 
         grouper_df = df[[siteid_col]].copy()
         grouper_df[site_id_column] = self.get_siteid(grouper_df[siteid_col]).fillna(self.config.unknown_siteid)
@@ -447,47 +414,13 @@ class QPCRSites(object):
                 file_id = file_id.upper()
         return parse_values(
             file_template, 
+            None,
             site_id=cleanup_file_name(site_id), 
             site_title=cleanup_file_name(site_title), 
             parent_site_id=cleanup_file_name(parent_site_id), 
             parent_site_title=cleanup_file_name(parent_site_title),
             file_id=cleanup_file_name(file_id)
             )[0]
-
-        # for parent_id, parent_group in self.sites_df.groupby(self.config.columns.parentid.column):
-        #     cur_siteids = parent_group[self.config.columns.siteid.column]
-        #     all_siteids.extend(list(cur_siteids))
-        #     children = siteids.isin(cur_siteids)
-        #     if intersection_filter is not None:
-        #         children = children & intersection_filter
-        #     if children.sum() == 0:
-        #         continue
-
-        #     cur_filt = children
-        #     if always_include_filter is not None:
-        #         cur_filt = children | always_include_filter
-            
-        #     groups.append(({
-        #         "parentSiteID" : parent_id,
-        #         "parentSiteTitle" : self.get_parent_title(parent_id)
-        #     }, df[cur_filt]))
-
-        # # Add unrecognized sites
-        # site_unknowns = ~siteids.isin(all_siteids)
-        # if site_unknowns.sum() > 0:
-        #     cur_filt = site_unknowns
-        #     if intersection_filter is not None:
-        #         cur_filt = cur_filt & intersection_filter
-        #     if always_include_filter is not None:
-        #         cur_filt = cur_filt | always_include_filter
-        #     cur_df = df[cur_filt]
-        #     groups.append(({
-        #         "parentSiteID" : self.config.unknown_siteid,
-        #         "parentSiteTitle" : self.config.unknown_siteid,
-        #     }, cur_df))
-            
-        # return groups
-
 
     def determine_file_groups(self, df, path_template):
         pass
@@ -529,11 +462,5 @@ class QPCRSites(object):
         return [self.get_siteid(siteid) or siteid]
 
 if __name__ == "__main__":
-    sites = QPCRSites("sites.yaml", "sites.xlsx")
-    # df = pd.DataFrame({"a" : ["vc2.07.08.21", "o.07.08.21", "q.12"]})
-    # print(sites.get_sample_siteid("vc2.07.08.21"))
-    # types = sites.get_sample_sample_type(df)
-    # print(sites.get_type_short_description(types))
-    # print(sites.get_siteids_with_shared_parentid("g"))
-
-
+    sites = QPCRSites("qpcr_sites.yaml", "qpcr_sites.xlsx")
+    print(sites.get_sample_siteid("uo_rgn.02.03.04"))

@@ -1,0 +1,21 @@
+
+input:
+    main_targets:
+        - "covN1"
+
+    other_targets:
+        - "covN2"
+
+    inhibition_targets:
+        - "PMMoV"
+        - "PMMoV:10"
+        - "PMMoV:40"
+
+    normalizing_targets:
+        - "PMMoV:10"
+
+template:
+    calibration_location: "cal_sheet"    # "main_sheet" | "cal_sheet" | "caltarget_sheet" | "hide"
+    main_banners_and_headers_once: True
+    cal_origin: [1, 1]
+    main_sheet_freeze_panes: "B2"

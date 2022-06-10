@@ -23,6 +23,13 @@ Until this is fixed, it is recommended to always save and reload first:
 
 """
 
+from pycel.excelutil import (
+    ERROR_CODES,
+    NA_ERROR,
+    REF_ERROR,
+    VALUE_ERROR,
+)
+
 from openpyxl.cell.cell import Cell
 import inspect
 from pycel.excelformula import FormulaEvalError
@@ -86,14 +93,66 @@ def stdev(*args):
     else:
         return np.std(data, ddof=1)
 
+def _slope_intercept(Y, X, **kwargs):
+    XY = [[x[0],y[0]] for x,y in zip(X,Y) if isinstance(x[0], (float, int)) and isinstance(y[0], (float, int))]
+    Y = tuple([(y,) for _,y in XY])
+    X = tuple([(x,) for x,_ in XY])
+
+    try:
+        coefs, full_rank = pycel.lib.stats.linest_helper(Y, X, **kwargs)
+    except AssertionError:
+        return NA_ERROR
+    except ValueError:
+        return VALUE_ERROR
+
+    if len(coefs) < 2:
+        return NA_ERROR
+    if not full_rank:
+        return DIV0
+    return coefs
+
+
+@excel_helper()
+def slope(Y, X):
+    # Excel reference: https://support.microsoft.com/en-us/office/
+    #   slope-function-11fb8f97-3117-4813-98aa-61d7e01276b9
+    coefs = _slope_intercept(Y, X)
+    if coefs in ERROR_CODES:
+        return coefs
+    return coefs[0]
+
 @excel_helper()
 def rsq(Y, X):
     # Excel reference: https://support.microsoft.com/en-us/office/
     #   rsq-function-d7161715-250d-4a01-b80d-a8364f2be08f
+    
+    coefs = _slope_intercept(Y, X, stats=True)
+    if coefs in ERROR_CODES:
+        return coefs
+    return coefs[2][0]
 
-    vals, _ = pycel.lib.stats.linest_helper(Y, X, stats=True)
-    rsq = vals[2][0]
-    return rsq
+
+    # XY = [[x[0],y[0]] for x,y in zip(X,Y) if isinstance(x[0], (float, int)) and isinstance(y[0], (float, int))]
+    # Y = tuple([(y,) for _,y in XY])
+    # X = tuple([(x,) for x,_ in XY])
+
+    # try:
+    #     coefs, full_rank = pycel.lib.stats.linest_helper(Y, X, stats=True)
+    # except AssertionError:
+    #     return REF_ERROR
+    # except ValueError:
+    #     return VALUE_ERROR
+
+    # return coefs[2][0]
+    
+@excel_helper()
+def intercept(Y, X):
+    # Excel reference: https://support.microsoft.com/en-us/office/
+    #   intercept-function-2a9b74e2-9d47-4772-b663-3bca70bf63ef
+    coefs = _slope_intercept(Y, X)
+    if coefs in ERROR_CODES:
+        return coefs
+    return coefs[1]
     
 @excel_helper()
 def hyperlink(value, text):
@@ -108,6 +167,8 @@ def address(row, col):
 
 pycel.lib.stats.stdev = stdev
 pycel.lib.stats.rsq = rsq
+pycel.lib.stats.slope = slope
+pycel.lib.stats.intercept = intercept
 pycel.lib.lookup.hyperlink = hyperlink
 pycel.lib.lookup.address = address
 
@@ -116,3 +177,4 @@ if __name__ == "__main__":
     add_excel_calculated_values(wb)
     wb.save("/Users/martinwellman/Documents/Health/Wastewater/Code/test-new/calc.xlsx")
     print("Finished!")
+

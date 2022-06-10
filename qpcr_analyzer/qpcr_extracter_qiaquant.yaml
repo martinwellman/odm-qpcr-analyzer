@@ -1,0 +1,52 @@
+qpcr_format_name: "QIAquant"
+
+# Columns defining this QPCR format. If a table has all of these columns then the table is for
+# this config file's format.
+match_columns_in_raw:
+    - "Well"
+    - "Gene"
+    - "Sample type"
+    - "Sample name"
+    - "Ct"
+    - "Conc. Std."
+
+# Delete these columns from the raw table
+# delete_columns_from_raw: [
+# ]
+
+# Extract these columns from the raw table and rename them
+extract_columns:
+    -   origin: "Well"
+        target: "wellID"
+    -   origin: "Gene"
+        target: "target"
+    -   origin: "Sample type"
+        target: "measureType"
+    -   origin: "Sample name"
+        target: "sampleID"
+    -   origin: "Ct"
+        target: "ct"
+    -   origin: "Conc. Std."
+        target: "sq"
+
+# Apply these regex operations to each extracted column
+# Keys are:
+#   columns: list[str]|str - The column(s) to apply the regex to
+#   targetColumns: list[str]|str|None - The result of the regex are assigned
+#       to these columns. If empty then columns are changed in place.
+#   match: The regex to match
+#   replace: The replacement for the regex. Tags are specified by \\n.
+mappers:
+    -   columns: "measureType"
+        match: "Standard"
+        replace: "std"
+    -   columns: "measureType"
+        match: "Unknown"
+        replace: "unkn"
+    -   columns: "measureType"
+        match: "NTC"
+        replace: "ntc"
+    -   columns: "ct"
+        match: "No Ct"
+        replace: ""
+# @TODO: Need mapper for EB in measureType

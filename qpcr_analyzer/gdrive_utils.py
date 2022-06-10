@@ -30,6 +30,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 import json
+import re
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive',
@@ -242,6 +243,11 @@ def drive_get_file_name(file_id):
 def drive_get_file_id(path, root_id=None):
     """Get the Google file ID of the specified Google Drive file (path).
     """
+    if "/" not in path:
+        tagged_id = get_tagged_id(path)
+        if tagged_id:
+            return tagged_id
+    
     files = drive_get_files_in_folder(os.path.dirname(path), root_id)
     if files is None:
         return None
@@ -397,3 +403,86 @@ def drive_has_write_permission(file_id):
     
     return False
 
+def get_folderid_from_url(url):
+    """Get a Google Drive folder ID that is specified within the http or https url.
+    """
+    if not isinstance(url, str):
+        return None
+    if url[:len("https://")] != "https://" and url[:len("http://")] != "http://":
+        return None
+    if "drive.google.com" in url:
+        # https://drive.google.com/drive/u/2/folders/<FOLDERID>
+        comps = url.split("/folders/")
+        if len(comps) == 2:
+            folder_id = comps[1].split("/")[0].split("?")[0]
+            return folder_id or None
+    return None
+
+def get_fileid_from_url(url):
+    """Retrieve the Google Drive file ID from the specified http or https url.
+    """
+    if not isinstance(url, str):
+        return None
+    if url[:len("https://")] != "https://" and url[:len("http://")] != "http://":
+        return None
+    if "docs.google.com" in url:
+        # Sample URL format (we want <FILEID>):
+        # https://docs.google.com/spreadsheets/d/<FILEID>/edit?usp=sharing&ouid=102931465286862945500&rtpof=true&sd=true
+        try:
+            res = re.search("/d/([^/\\?#]*)", url)
+            if res and len(res.groups()) >= 1:
+                file_id = res.group(1)
+                return file_id
+        except Exception as e:
+            pass
+    if "drive.google.com" in url:
+        # Sample URL format (we want <FILEID>):
+        # https://drive.google.com/uc?export=download&id=<FILEID>
+        try:
+            res = re.search("[&/\\?]id=([^&\\?#]*)", url)
+            if res and len(res.groups()) >= 1:
+                file_id = res.group(1)
+                return file_id
+        except Exception as e:
+            pass
+        
+        # Try other format
+        # https://drive.google.com/file/d/<FILEID>/view?usp=sharing
+        try:
+            res = re.search("/d/([^/\\?#]*)", url)
+            if res and len(res.groups()) >= 1:
+                file_id = res.group(1)
+                return file_id
+        except Exception as e:
+            pass
+        
+    return None
+
+def clean_url_for_download(url):
+    """Change the http/https Google Drive URL so that it is for download the file ID, rather than for another operation
+    such as editing the file. If it is not a Google Drive URL then it is returned unchanged.
+    
+    eg. https://docs.google.com/spreadsheets/d/1234567890abcdefghijklmnopqrstuvw/edit#gid=1934050177
+        =>
+        https://drive.google.com/uc?export=download&id=1234567890abcdefghijklmnopqrstuvw
+    """
+    file_id = get_fileid_from_url(url)
+    if not file_id:
+        return url
+    
+    return f"https://drive.google.com/uc?export=download&id={file_id}"
+
+def clean_url_for_folder(url):
+    """Change the http/https Google Drive URL so that it is a gd:// URL for a Google Drive folder,
+    rather than in http/https form. If it is not a Google Drive folder URL then it is returned
+    unchanged.
+    
+    eg. https://drive.google.com/drive/u/2/folders/1Z5PDVHG_dQWizn3luNSTEFocz8rNA373
+        =>
+        gd://::1Z5PDVHG_dQWizn3luNSTEFocz8rNA373::
+    """
+    folder_id = get_folderid_from_url(url)
+    if not folder_id:
+        return url
+    
+    return f"gd://::{folder_id}::"

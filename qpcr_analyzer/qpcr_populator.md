@@ -4,15 +4,18 @@ The QPCRPopulator class receives ODM data and creates an output report, along wi
 
 ## Usage
 
-    qpcr = QPCRPopulator(input_file=mapped_file,    # mapped_file is the XLSX output of BioRadMapper (ie. in ODM format)
-        template_file=populator_template,           # eg. qpcr_template_ottawa.xlsx
-        target_file=output_file, 
+    qpcr = QPCRPopulator(input_file=merged_extracted_file,  # Extracted output from QPCRExtracter
+        template_file="qpcr_template_long-2main-inh.xlsx", 
+        target_file="my_output.xlsx", 
         overwrite=True, 
-        config_file=populator_config,               # eg. qpcr_populator_ottawa.yaml
-        qaqc_config_file=qaqc_config,               # eg. qaqc_ottawa.yaml
-        sites_config=sites_config,                  # eg. sites.yaml
-        sites_file=sites_file,                      # eg. sites.xlsx
-        hide_qaqc=False)
+        config_file="qpcr_populator_long-2main-inh.yaml", 
+        qaqc_config_file="qaqc_long-2main-inh.yaml",
+        sites_config="qpcr_sites.yaml",
+        sites_file="qpcr_sites.xlsx",
+        sampleids_config = "qpcr_sampleids.yaml", 
+        sampleslog_config = "qpcr_sampleslog.yaml", 
+        sampleslog_file = "sampleslog_file.xlsx",
+        hide_qaqc=hide_qaqc)
     output_files = qpcr.populate()
 
 ## Flow
@@ -21,17 +24,17 @@ The following is the flow of code through the main steps for the QPCRPopulator.p
 
 1. Prepare the WWMeasure Pandas DataFrames: Split by site if required, do further splits by analysis date, add `standardCurveID`s to each Ct sample, to identify which standard curve that sample uses.
 1. For each analysis date:
-    1. `qaqc.remove_all_outliers()`: For all outliers detected, will set the Ct value to None, and set the new column `qpcr_utils.OUTLIER_COL` to the original Ct value
+    1. `qaqc.remove_all_outliers()`: For all outliers detected, will set the Ct value to None, and set the new column `qpcr_utils.OUTLIER_COL` to the original Ct value (since we may need the value later)
     1. `create_main()`
         1. Further organize the data
         1. Call `copy_rows()` for the banners in the template file (identified by `main_row_banner`)
-        1. For each of our main genes:
+        1. For each of our main targets:
             1. Call `copy_rows()` for the headers in the template file (identified by "main_row_header")
             1. Call `copy_rows()` for each sample ID in our data (template rows identified by `main_row_data`)
     1. `create_calibration()`
         1. Organize the same data we passed to create_main
         1. Call `copy_rows()` for the banners in the template file (identified by `cal_row_banner`)
-        1. For each of our main genes:
+        1. For each of our main targets:
             1. Call `copy_rows()` for the headers in the template file (identified by `cal_row_header`)
             1. Call `copy_rows()` for each SQ value in our data (template rows identified by `cal_row_data`). SQ values are the copies/well for each standard.
     1. For any late binding custom functions, call those functions to finalize parsing of the template.
@@ -48,12 +51,12 @@ To get an idea of how this is done, see [excel_calculator.py](excel_calculator.p
 
 ## Template Tags
 
-Tags can be placed in any cell of the template file and are replaced by the parser. For example, {value_covn1_0} will be replaced by the Ct value for the covN1 gene for the sample ID associated with the current row. Tags are case-insensitive.
+Tags can be placed in any cell of the template file and are replaced by the parser. For example, {value_covn1_0} will be replaced by the Ct value for the covN1 target for the sample ID associated with the current row. Tags are case-insensitive.
 
 A full list of tags are shown below.
 
 - **{value_n}**: The Ct value for replicate `n` (0-based) for the current row's sample (eg. {value_0}).
-- **{value_gene_n}**: The Ct value for replicate `n` (0-based) for the current row's sample, for gene `gene` (eg. {value_covn1_0})
+- **{value_target_n}**: The Ct value for replicate `n` (0-based) for the current row's sample, for target `target` (eg. {value_covn1_0})
 - **{value_emptytubemass_n}**: Empty tube mass for replicate `n` (0-based) for the current row's sample. (eg. {value_emptytubemass_0})
 - **{value_tottubemass_n}**: Total tube mass (tube+sample) for replicate `n` (0-based) for the current row's sample. (eg. {value_tottubemass_0})
 - **{value_extmass_n}**: Extracted mass for replicate `n` (0-based) for the current row's sample. (eg. {value_extmass_0})

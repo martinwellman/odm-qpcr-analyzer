@@ -1,10 +1,5 @@
-#%%
-# %load_ext autoreload
-# %autoreload 2
-
 """
-custom_functions.py
-===================
+# custom_functions.py
 
 All available Excel custom functions in the Excel template files. Custom functions all begin with two underscores (\__). The return value 
 of the custom function is used to replace the custom function call in the cell's value.
@@ -19,7 +14,6 @@ import numbers
 
 from qpcr_utils import (
     add_sheet_name_to_colrow_name,
-    strip_quotes,
 )
 
 # Regex to search for custom functions. %s should be the function name, eg __GETRANGE
@@ -41,16 +35,24 @@ CUSTOM_FUNCS = {
         "func" : "custom_func_setcell",
         "bind" : 1,
     },
-    # "__SETCELLATTR" : {
-    #     "func" : "custom_func_setcellattr",
-    #     "bind" : 1,
-    # },
     "__QUOTIFY" : {
         "func" : "custom_func_quotify",
         "bind" : -20,
     },
+    "__UNQUOTIFY" : {
+        "func" : "custom_func_unquotify",
+        "bind" : -20,
+    },
     "__UPPER" : {
         "func" : "custom_func_upper",
+        "bind" : -21,
+    },
+    "__LOWER" : {
+        "func" : "custom_func_lower",
+        "bind" : -21,
+    },
+    "__MAKEHEADER" : {
+        "func" : "custom_func_makeheader",
         "bind" : -21,
     },
     "__SELECT" : {
@@ -364,11 +366,26 @@ def custom_func_select(populator, value_a, value_b, **kwargs):
         return value_b
     return value_a
 
+def custom_func_makeheader(populator, value, **kwargs):
+    """Convert text to header format: Replace non-alphanumeric characters with underscore and make lowercase.
+    """
+    if isinstance(value, str):
+        value = re.sub("[^A-Za-z0-9]", "_", value).lower()
+    return value
+    
+
 def custom_func_upper(populator, value, **kwargs):
     """Make text uppercase.
     """
     if isinstance(value, str):
         value = value.upper()
+    return value
+
+def custom_func_lower(populator, value, **kwargs):
+    """Make text lowerrcase.
+    """
+    if isinstance(value, str):
+        value = value.lower()
     return value
 
 def custom_func_quotify(populator, value, **kwargs):
@@ -377,6 +394,18 @@ def custom_func_quotify(populator, value, **kwargs):
     value = value if value is None else str(value)
     value = value.replace('"', '""')
     return f'"{value}"'
+
+def custom_func_unquotify(populator, value, only_if_number=False, **kwargs):
+    """Remove quotes from the value.
+    """
+    number_value = value if value is None else str(value)
+    number_value = number_value.replace('"', '').replace("'", "")
+    if cast_bool(only_if_number):
+        try:
+            number_value = float(number_value)
+        except:
+            return f'"{value}"'
+    return number_value
 
 def custom_func_getdata(populator, cell_addr, id, format=None, **kwargs):
     """Get the values in the attached_data of the cell.
@@ -408,9 +437,3 @@ def custom_func_getdata(populator, cell_addr, id, format=None, **kwargs):
         return ";".join([str(a) for a in all_values])
 
     return format.format(*all_values)
-
-# def custom_func_setcellattr(populator, attr_id, attr_value, replace_value="", **kwargs):
-#     target_cell = kwargs.get("target_cell", None)
-#     # print("SETTING ATTR:", target_cell.coordinate, attr_id, "=", attr_value)
-#     setattr(target_cell, attr_id, attr_value)
-#     return replace_value

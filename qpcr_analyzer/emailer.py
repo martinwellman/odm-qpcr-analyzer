@@ -58,11 +58,17 @@ def send_email(sender, dest_emails, subject, email_html, email_text=None, attach
 
         # Load and attach attachments
         if attachments:
-            attachments = list(dict.fromkeys(attachments))
+            # attachments = list(dict.fromkeys(attachments))
             for attachment in attachments:
-                with open(attachment, "rb") as f:
-                    part = MIMEApplication(f.read())
-                    part.add_header("Content-Disposition", "attachment", filename=os.path.basename(attachment))
+                filename = None
+                if isinstance(attachment, str):
+                    with open(attachment, "rb") as f:
+                        part = MIMEApplication(f.read())
+                        filename = os.path.basename(attachment)
+                else:
+                    part = MIMEApplication(attachment["contents"])
+                    filename = attachment["filename"]
+                part.add_header("Content-Disposition", "attachment", filename=filename)
                 msg.attach(part)
 
         response = client.send_raw_email(Source=sender, Destinations=dest_emails, RawMessage={"Data" : msg.as_string()})

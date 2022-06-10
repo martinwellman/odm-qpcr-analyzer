@@ -1,0 +1,27 @@
+columns:
+    - ["Sample location", "sampleLocation"]
+    - ["Sample Date", "sampleDate"]
+    - ["Lab Arrival Date", "sampleArrivalDate"]
+    - ["Extraction Date", "sampleExtractionDate"]
+    - ["qPCR Date", "analysisDate"]
+    - ["Total volume(mL)", "totalVolume"]
+    - ["Settled solids(mL)", "settledSolids"]
+    - ["Empty", "emptyTubeMass"]
+    - ["Full", "totalTubeMass"]
+    - ["Extracted Weight", "extractedMass"]
+
+cast_info:
+    -   columns: "settledSolids"
+        default: 40
+        type: "number"
+    -   columns: ["totalVolume", "emptyTubeMass", "totalTubeMass", "extractedMass"]
+        default: NULL
+        type: "number"
+    -   columns: ["sampleDate", "sampleArrivalDate", "sampleExtractionDate", "analysisDate"]
+        default: NULL
+        type: "date"
+
+sample_location_col: "sampleLocation"
+sample_date_col: "sampleDate"
+sample_id_col: "sampleID"
+match_sample_id_col: "matchSampleID"

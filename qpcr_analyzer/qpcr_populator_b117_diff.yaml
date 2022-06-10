@@ -1,0 +1,12 @@
+
+input:
+    main_targets:
+        - "covN1"
+
+    other_targets:
+        - "d3"
+        - "d3l_del"
+
+template:
+    main_banners_and_headers_once: True
+    main_sheet_freeze_panes: "D2"
