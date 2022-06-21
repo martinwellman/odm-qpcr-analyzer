@@ -371,9 +371,8 @@ if __name__ == "__main__":
         opts = EasyDict({
             "input_files" : [                
                 # "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/other/2022-05-06 N2 (AriaMX output) - N1.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/2021-08-19/qPCR-2021-08-19_N1_O_CSC_H_VC_GAT_13 SAMPLES_KB.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/2021-08-19/qPCR-2021-08-19_N2_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",
-                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/2021-08-19/qPCR-2021-08-19_PEPPER_O_CSC_H_VC_GAT_13 SAMPLES_KB.pltd.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/2022-06-21/qPCR-2022-06-20 PEPPER O 06.17-19  UO 06.17_All Wells -  Quantification Cq Results.xlsx",
+                "/Users/martinwellman/Documents/Health/Wastewater/Code/inputs/biorad-ottawa/2022-06-21/qPCR-2022-06-20 N1 N2 O 06.17-18-19 UO 06.17_All Wells -  Quantification Cq Results.xlsx",
 
                 # "/Users/martinwellman/Documents/Health/Wastewater/Additional Labs Info/2022-05-06 N2 (AriaMX output).xlsx",
                 # "/Users/martinwellman/Documents/Health/Wastewater/Additional Labs Info/2022-03-24 N1 (Qiaquant output).xls",

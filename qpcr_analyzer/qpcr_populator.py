@@ -1021,7 +1021,25 @@ class QPCRPopulator(object):
         # target_col += cal_origin[1] - 1
 
         # Go through all targets that have calibration curve data.
-        for idx, (target_name, target_df) in enumerate(std_data.groupby(self.config.input.target_col)):
+        def _form_groups(df):
+            # This is similar to doing df.groupby(self.config.input.target_col), but we use our own ordering of the groups
+            # with main_targets first, then other_targets, then normalizing_targets, then inhibition_targets,
+            # then any target that isn't in these groups.
+            group_names = sorted(df[self.config.input.target_col].unique())
+            all_groups = []
+            for cur_targets in [self.config.input.main_targets, self.config.input.other_targets, self.config.input.normalizing_targets, self.config.input.inhibition_targets]:
+                if cur_targets:
+                    for target in cur_targets:
+                        if target in group_names:
+                            all_groups.append([target, None])
+                            group_names.remove(target)
+            
+            all_groups.extend([[g, None] for g in group_names])
+            for idx in range(len(all_groups)):
+                all_groups[idx][1] = df[df[self.config.input.target_col] == all_groups[idx][0]]
+            return all_groups
+                        
+        for idx, (target_name, target_df) in enumerate(_form_groups(std_data)):
             for plate_id, plate_df in target_df.groupby(self.config.input.plate_id_col):
                 row_data_kwargs = {
                     "plateID" : plate_id,
